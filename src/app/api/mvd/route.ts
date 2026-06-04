@@ -26,11 +26,12 @@ export async function POST(request: Request) {
           consumerDataPlane: await healthCheck(config.consumerDataPlaneUrl),
         });
       case "requestCatalog":
-        return Response.json(await requestCatalog(config, body.traceId));
+        return Response.json(await requestCatalog(config, body.traceId, body.useCaseId));
       case "startContractNegotiation":
         return Response.json(
           await startContractNegotiation(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             offerId: required(body.offerId, "offerId"),
             assetId: body.assetId,
           }),
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
         return Response.json(
           await getContractNegotiation(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             negotiationId: required(body.negotiationId, "negotiationId"),
           }),
         );
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
         return Response.json(
           await startTransfer(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             agreementId: required(body.agreementId, "agreementId"),
             assetId: body.assetId,
           }),
@@ -54,6 +57,7 @@ export async function POST(request: Request) {
         return Response.json(
           await getTransfer(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             transferProcessId: required(body.transferProcessId, "transferProcessId"),
           }),
         );
@@ -61,6 +65,7 @@ export async function POST(request: Request) {
         return Response.json(
           await getEdrOrDataflow(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             transferProcessId: body.transferProcessId,
           }),
         );
@@ -68,6 +73,7 @@ export async function POST(request: Request) {
         return Response.json(
           await fetchData(config, {
             traceId: body.traceId,
+            useCaseId: body.useCaseId,
             transferProcessId: required(body.transferProcessId, "transferProcessId"),
             accessToken: body.accessToken,
           }),

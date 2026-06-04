@@ -1,10 +1,5 @@
-import { AppShell } from "@/components/AppShell";
-import { DashboardClient } from "@/components/DashboardClient";
+import { redirect } from "next/navigation";
 
 export default function TransferPage() {
-  return (
-    <AppShell>
-      <DashboardClient view="transfer" />
-    </AppShell>
-  );
+  redirect("/scenario-wizard?useCase=UC-E1");
 }

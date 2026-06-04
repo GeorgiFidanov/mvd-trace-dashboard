@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MVD Trace Dashboard",
-  description: "Trace the Eclipse EDC MinimumViableDataspace demo flow",
+  title: "Dataspace Use-Case Validation Platform",
+  description: "Educational Eclipse EDC scenario validation dashboard",
 };
 
 export default function RootLayout({

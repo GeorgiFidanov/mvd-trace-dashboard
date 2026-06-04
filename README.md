@@ -1,16 +1,18 @@
-# MVD Trace Dashboard
+# Dataspace Use-Case Validation Platform
 
-Developer dashboard for tracing the Eclipse EDC `MinimumViableDataspace` catalog, contract negotiation, transfer,
-EDR/dataflow, and final data fetch process.
+Educational demonstrator dashboard for validating dataspace use cases across FIWARE and Eclipse EDC tracks. It guides
+identity, discovery, policy, negotiation, transfer, and data retrieval scenarios while preserving technical traces for
+deeper review.
 
 ## Why This Exists
 
 The MVD demo proves that two EDC participants can discover data, negotiate a contract, start a transfer, and fetch data.
 When that flow fails, the useful details are spread across browser requests, control-plane APIs, data-plane APIs, and
-Kubernetes logs. This dashboard was created as a local debugging companion that records each step in one place.
+Kubernetes logs. This dashboard was created as a local debugging companion and is being evolved into a Dataspace
+Use-Case Validation Platform that records and explains each step in one place.
 
-It is intentionally scoped as a demo/playground tool. It does not modify or deploy the MVD backend. A Next.js backend for
-frontend (BFF) calls the existing MVD APIs, redacts sensitive headers and payload fields, and stores traces in a local
+It is intentionally scoped as a demo/playground tool. It does not modify or deploy the MVD backend. A local Next.js
+dashboard API calls the existing MVD APIs, redacts sensitive headers and payload fields, and stores traces in a local
 SQLite database at `data/mvd-traces.sqlite`.
 
 ## How It Works
@@ -20,7 +22,7 @@ the MVD control plane or data plane through helpers in `src/lib`.
 
 - `src/components/DashboardClient.tsx` owns the interactive dashboard, manual step buttons, full-flow runner, settings
   form, trace timeline, and last-result panel.
-- `src/app/api/mvd/route.ts` is the BFF entry point for MVD actions such as catalog, negotiation, transfer, EDR/dataflow,
+- `src/app/api/mvd/route.ts` is the dashboard API entry point for MVD actions such as catalog, negotiation, transfer, EDR/dataflow,
   final data fetch, and health checks.
 - `src/lib/mvdClient.ts` performs outbound MVD HTTP calls, records each trace event, and falls back to mock responses when
   `MVD_MOCK_MODE=auto` and a service is unavailable.
@@ -96,7 +98,7 @@ Important variables:
 
 ## Mock Mode
 
-`MVD_MOCK_MODE=auto` is the default. The BFF tries the real MVD service and falls back to MVD-like mock responses only
+`MVD_MOCK_MODE=auto` is the default. The dashboard API tries the real MVD service and falls back to MVD-like mock responses only
 when a service call fails. Use `MVD_MOCK_MODE=on` to demo the UI without MVD, or `MVD_MOCK_MODE=off` to fail fast when a
 service is unavailable.
 
@@ -111,6 +113,13 @@ called, plus whether mock data was used.
 - SQLite-backed traces and trace events.
 - Redacted headers and payload display with explicit reveal controls.
 - Timeline and generated sequence view.
+- EduCloud-ready liveness/readiness endpoints and Kubernetes scaffolding.
+
+## Redesign And Deployment Plan
+
+See `docs/validation-platform-redesign.md` for the refactored architecture proposal, folder structure, updated UI
+hierarchy, component breakdown, storage requirements, Kubernetes deployment structure, EduCloud checklist, and migration
+plan from the original trace dashboard.
 
 ## Commit And Repository Safety
 

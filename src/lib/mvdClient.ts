@@ -15,6 +15,7 @@ import type { MvdConfig, MvdStepResult, Trace } from "./types";
 
 type StepCall = {
   traceId?: string;
+  useCaseId?: string;
   stepName: string;
   actor: string;
   target: string;
@@ -26,12 +27,13 @@ type StepCall = {
   mockMode: MvdConfig["mockMode"];
 };
 
-export async function requestCatalog(config: MvdConfig, traceId?: string) {
+export async function requestCatalog(config: MvdConfig, traceId?: string, useCaseId?: string) {
   const body = buildCatalogRequest(config);
   const result = await callMvd({
     traceId,
+    useCaseId,
     stepName: "requestCatalog",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Control Plane",
     method: "POST",
     url: joinUrl(config.consumerControlPlaneUrl, mvdEndpoints.requestCatalog),
@@ -45,12 +47,13 @@ export async function requestCatalog(config: MvdConfig, traceId?: string) {
   return result;
 }
 
-export async function startContractNegotiation(config: MvdConfig, args: { traceId?: string; offerId: string; assetId?: string }) {
+export async function startContractNegotiation(config: MvdConfig, args: { traceId?: string; useCaseId?: string; offerId: string; assetId?: string }) {
   const body = buildContractRequest(config, args.offerId, args.assetId);
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "startContractNegotiation",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Control Plane",
     method: "POST",
     url: joinUrl(config.consumerControlPlaneUrl, mvdEndpoints.startContractNegotiation),
@@ -69,11 +72,12 @@ export async function startContractNegotiation(config: MvdConfig, args: { traceI
   return result;
 }
 
-export async function getContractNegotiation(config: MvdConfig, args: { traceId?: string; negotiationId: string }) {
+export async function getContractNegotiation(config: MvdConfig, args: { traceId?: string; useCaseId?: string; negotiationId: string }) {
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "getContractNegotiation",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Control Plane",
     method: "GET",
     url: joinUrl(config.consumerControlPlaneUrl, mvdEndpoints.getContractNegotiation(args.negotiationId)),
@@ -89,12 +93,13 @@ export async function getContractNegotiation(config: MvdConfig, args: { traceId?
   return result;
 }
 
-export async function startTransfer(config: MvdConfig, args: { traceId?: string; agreementId: string; assetId?: string }) {
+export async function startTransfer(config: MvdConfig, args: { traceId?: string; useCaseId?: string; agreementId: string; assetId?: string }) {
   const body = buildTransferRequest(config, args.agreementId, args.assetId);
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "startTransfer",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Control Plane",
     method: "POST",
     url: joinUrl(config.consumerControlPlaneUrl, mvdEndpoints.startTransfer),
@@ -111,11 +116,12 @@ export async function startTransfer(config: MvdConfig, args: { traceId?: string;
   return result;
 }
 
-export async function getTransfer(config: MvdConfig, args: { traceId?: string; transferProcessId: string }) {
+export async function getTransfer(config: MvdConfig, args: { traceId?: string; useCaseId?: string; transferProcessId: string }) {
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "getTransfer",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Control Plane",
     method: "GET",
     url: joinUrl(config.consumerControlPlaneUrl, mvdEndpoints.getTransferState(args.transferProcessId)),
@@ -130,12 +136,13 @@ export async function getTransfer(config: MvdConfig, args: { traceId?: string; t
   return result;
 }
 
-export async function getEdrOrDataflow(config: MvdConfig, args: { traceId?: string; transferProcessId?: string }) {
+export async function getEdrOrDataflow(config: MvdConfig, args: { traceId?: string; useCaseId?: string; transferProcessId?: string }) {
   const path = args.transferProcessId ? mvdEndpoints.getOpenDataflow(args.transferProcessId) : mvdEndpoints.getOpenDataflows;
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "getEdrOrDataflow",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Data Plane",
     method: "GET",
     url: joinUrl(config.consumerDataPlaneUrl, path),
@@ -150,12 +157,13 @@ export async function getEdrOrDataflow(config: MvdConfig, args: { traceId?: stri
   return result;
 }
 
-export async function fetchData(config: MvdConfig, args: { traceId?: string; transferProcessId: string; accessToken?: string }) {
+export async function fetchData(config: MvdConfig, args: { traceId?: string; useCaseId?: string; transferProcessId: string; accessToken?: string }) {
   const headers = args.accessToken ? { Authorization: args.accessToken } : undefined;
   const result = await callMvd({
     traceId: args.traceId,
+    useCaseId: args.useCaseId,
     stepName: "fetchData",
-    actor: "Dashboard/BFF",
+    actor: "Dashboard API",
     target: "Consumer Data Plane",
     method: "GET",
     url: joinUrl(config.consumerDataPlaneUrl, mvdEndpoints.fetchData(args.transferProcessId)),
@@ -163,7 +171,10 @@ export async function fetchData(config: MvdConfig, args: { traceId?: string; tra
     mockResponse: mockFinalData(),
     mockMode: config.mockMode,
   });
-  result.trace = updateTrace(result.trace.id, { transferProcessId: args.transferProcessId, status: "success" });
+  result.trace = updateTrace(result.trace.id, {
+    transferProcessId: args.transferProcessId,
+    status: result.event.status === "success" ? "success" : "error",
+  });
   return result;
 }
 
@@ -178,7 +189,11 @@ export async function healthCheck(url: string) {
 }
 
 async function callMvd(call: StepCall): Promise<MvdStepResult> {
-  const trace = call.traceId ? getTrace(call.traceId) ?? createTrace() : createTrace();
+  const trace = call.traceId ? getTrace(call.traceId) ?? createTrace({ useCaseId: call.useCaseId }) : createTrace({ useCaseId: call.useCaseId });
+  if (call.useCaseId && trace.useCaseId !== call.useCaseId) {
+    updateTrace(trace.id, { useCaseId: call.useCaseId });
+    trace.useCaseId = call.useCaseId;
+  }
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const headers = call.headers ?? {};

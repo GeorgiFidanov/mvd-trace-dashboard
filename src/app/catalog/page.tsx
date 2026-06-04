@@ -1,10 +1,5 @@
-import { AppShell } from "@/components/AppShell";
-import { DashboardClient } from "@/components/DashboardClient";
+import { redirect } from "next/navigation";
 
 export default function CatalogPage() {
-  return (
-    <AppShell>
-      <DashboardClient view="catalog" />
-    </AppShell>
-  );
+  redirect("/scenario-wizard?useCase=UC-E4");
 }

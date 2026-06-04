@@ -1,10 +1,5 @@
-import { AppShell } from "@/components/AppShell";
-import { DashboardClient } from "@/components/DashboardClient";
+import { redirect } from "next/navigation";
 
 export default function TracesPage() {
-  return (
-    <AppShell>
-      <DashboardClient view="traces" />
-    </AppShell>
-  );
+  redirect("/advanced-diagnostics");
 }

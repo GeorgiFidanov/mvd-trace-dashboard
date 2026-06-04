@@ -22,6 +22,10 @@ export const defaultConfig: MvdConfig = {
     process.env.MVD_MOCK_MODE === "on" || process.env.MVD_MOCK_MODE === "off"
       ? process.env.MVD_MOCK_MODE
       : "auto",
+  publicApiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000",
+  clusterName: process.env.NEXT_PUBLIC_CLUSTER_NAME ?? "local-mvd",
+  environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? "local",
+  otelEndpoint: process.env.NEXT_PUBLIC_OTEL_ENDPOINT ?? "",
 };
 
 export const mvdEndpoints = {

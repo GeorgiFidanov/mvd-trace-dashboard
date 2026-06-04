@@ -11,12 +11,12 @@ export function TraceTimeline({ events }: { events: TraceEvent[] }) {
   return (
     <div className="space-y-4">
       {events.map((event) => (
-        <details key={event.id} className="rounded-lg border border-slate-200 bg-white p-4">
+        <details key={event.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer list-none">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="font-semibold text-slate-950">{event.stepName}</div>
-                <div className="text-xs text-slate-500">
+                <div className="break-all text-xs text-slate-500">
                   {event.method} {event.url}
                 </div>
               </div>
@@ -27,7 +27,7 @@ export function TraceTimeline({ events }: { events: TraceEvent[] }) {
               </div>
             </div>
           </summary>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 2xl:grid-cols-2">
             <JsonBlock title="Request" value={{ headers: event.requestHeadersRedacted, body: event.requestBody }} />
             <JsonBlock title="Response" value={{ status: event.responseStatus, body: event.responseBody, ids: event.extractedIds }} />
           </div>

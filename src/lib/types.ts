@@ -13,6 +13,10 @@ export type MvdConfig = {
   apiKeyHeader: string;
   apiKeyValue: string;
   mockMode: "auto" | "on" | "off";
+  publicApiUrl: string;
+  clusterName: string;
+  environment: string;
+  otelEndpoint: string;
 };
 
 export type Trace = {
@@ -25,6 +29,7 @@ export type Trace = {
   contractAgreementId: string | null;
   transferProcessId: string | null;
   edrId: string | null;
+  useCaseId: string | null;
   status: TraceStatus;
 };
 

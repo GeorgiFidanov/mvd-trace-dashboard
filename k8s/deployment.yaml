@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edc-validation-dashboard
+  labels:
+    app: edc-validation-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edc-validation-dashboard
+  template:
+    metadata:
+      labels:
+        app: edc-validation-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: ghcr.io/example/edc-validation-dashboard:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: edc-validation-dashboard-config
+            - secretRef:
+                name: edc-validation-dashboard-secret
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: trace-data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: trace-data
+          emptyDir: {}

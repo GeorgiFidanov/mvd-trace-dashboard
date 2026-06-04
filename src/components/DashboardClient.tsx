@@ -6,6 +6,7 @@ import { JsonBlock } from "./JsonBlock";
 import { SequenceView, TraceTimeline } from "./TraceTimeline";
 import { Button, SecondaryButton } from "./ui/button";
 import { Card, CardDescription, CardTitle } from "./ui/card";
+import { useCases } from "@/lib/useCases";
 
 type View = "overview" | "catalog" | "negotiation" | "transfer" | "data" | "traces" | "settings";
 const emptySubscribe = () => () => undefined;
@@ -16,8 +17,10 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
   const [traces, setTraces] = useState<TraceWithEvents[]>([]);
   const [selection, setSelection] = useState<FlowSelection>({});
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [settingsHealth, setSettingsHealth] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [traceQuery, setTraceQuery] = useState("");
   const hydrated = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -32,6 +35,14 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
   const events = trace?.events ?? [];
   const title = useMemo(() => viewTitle(view), [view]);
   const disableAfterHydration = (disabled: boolean) => (hydrated ? disabled : undefined);
+  const filteredTraces = useMemo(
+    () =>
+      traces.filter((item) => {
+        const haystack = `${item.id} ${item.status} ${traceUseCaseLabel(item)}`.toLowerCase();
+        return haystack.includes(traceQuery.toLowerCase());
+      }),
+    [traceQuery, traces],
+  );
 
   async function refreshSettings() {
     const response = await fetch("/api/settings", { cache: "no-store" });
@@ -153,25 +164,147 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
     setLastResult(data);
   }
 
+  async function runSettingsHealthCheck() {
+    const result = await call("health");
+    setSettingsHealth(result);
+  }
+
+  if (view === "traces") {
+    return (
+      <div className="mx-auto max-w-7xl space-y-6 rounded-[2rem] bg-slate-100 p-6 text-slate-950">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Advanced Diagnostics</p>
+            <h1 className="mt-1 text-3xl font-bold text-slate-950">Trace explorer</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Select a saved execution once and inspect its timeline, sequence view, requests, responses, and extracted
+              protocol data without scrolling past every trace.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <SecondaryButton onClick={() => runTask(newTrace)} disabled={Boolean(busy)}>
+              New Trace
+            </SecondaryButton>
+            <Button onClick={() => runTask(runFullDemoFlow)} disabled={Boolean(busy)}>
+              {busy ? `Running ${busy}` : "Run Full Demo Flow"}
+            </Button>
+          </div>
+        </header>
+
+        {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+
+        <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-auto">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Executions</CardTitle>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{filteredTraces.length}</span>
+            </div>
+            <input
+              className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Search use case, status, trace ID"
+              value={traceQuery}
+              onChange={(event) => setTraceQuery(event.target.value)}
+            />
+            <div className="mt-4 grid gap-2">
+              {filteredTraces.map((item) => {
+                const selected = trace?.id === item.id;
+                const itemEvents = item.events ?? [];
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => refreshTrace(item.id)}
+                    className={`rounded-xl border p-3 text-left text-sm transition ${
+                      selected ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-slate-950">{traceUseCaseLabel(item)}</div>
+                      <span className={traceStatusClass(item.status)}>{item.status}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</div>
+                    <div className="mt-2 truncate font-mono text-xs text-slate-400">{item.id}</div>
+                    <div className="mt-2 text-xs text-slate-500">{itemEvents.length} recorded steps</div>
+                  </button>
+                );
+              })}
+              {!filteredTraces.length ? <p className="text-sm text-slate-500">No traces match the current search.</p> : null}
+            </div>
+          </aside>
+
+          <section className="min-w-0 space-y-5">
+            {trace ? (
+              <>
+                <Card>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Selected Execution</p>
+                      <CardTitle>{traceUseCaseLabel(trace)}</CardTitle>
+                      <CardDescription>
+                        {new Date(trace.createdAt).toLocaleString()} · {events.length} steps · trace{" "}
+                        <span className="font-mono">{trace.id}</span>
+                      </CardDescription>
+                    </div>
+                    <span className={traceStatusClass(trace.status)}>{trace.status}</span>
+                  </div>
+                </Card>
+                <Card>
+                  <CardTitle>Trace Timeline</CardTitle>
+                  <div className="mt-4">
+                    <TraceTimeline events={events} />
+                  </div>
+                </Card>
+                <Card>
+                  <CardTitle>Sequence View</CardTitle>
+                  <div className="mt-4">
+                    <SequenceView events={events} />
+                  </div>
+                </Card>
+                <Card>
+                  <CardTitle>Applied Data</CardTitle>
+                  <div className="mt-4">
+                    <JsonBlock value={{ selectedTrace: trace, lastResult }} />
+                  </div>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardTitle>Select an execution</CardTitle>
+                <CardDescription>
+                  Choose a trace from the left to inspect its timeline and payloads. The latest executions are listed
+                  first, with inferred use-case labels to reduce memory work.
+                </CardDescription>
+              </Card>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 rounded-[2rem] bg-slate-100 p-6 text-slate-950">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">{title}</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-950">Eclipse EDC MVD trace dashboard</h1>
+          <h1 className="mt-1 text-3xl font-bold text-slate-950">
+            {view === "settings" ? "Environment settings" : "Eclipse EDC MVD trace dashboard"}
+          </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Runs the catalog, contract negotiation, transfer, EDR/dataflow, and final data fetch flow through a local BFF
-            and records every API call as a trace event.
+            {view === "settings"
+              ? "Configure the endpoints and credentials the dashboard uses for local MVD or EduCloud deployments."
+              : "Runs the catalog, contract negotiation, transfer, EDR/dataflow, and final data fetch flow through the local dashboard API and records every API call as a trace event."}
           </p>
         </div>
-        <div className="flex gap-2">
-          <SecondaryButton onClick={() => runTask(newTrace)} disabled={Boolean(busy)}>
-            New Trace
-          </SecondaryButton>
-          <Button onClick={() => runTask(runFullDemoFlow)} disabled={Boolean(busy)}>
-            {busy ? `Running ${busy}` : "Run Full Demo Flow"}
-          </Button>
-        </div>
+        {view !== "settings" ? (
+          <div className="flex gap-2">
+            <SecondaryButton onClick={() => runTask(newTrace)} disabled={Boolean(busy)}>
+              New Trace
+            </SecondaryButton>
+            <Button onClick={() => runTask(runFullDemoFlow)} disabled={Boolean(busy)}>
+              {busy ? `Running ${busy}` : "Run Full Demo Flow"}
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
@@ -262,30 +395,16 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
       )}
 
       {view === "settings" && config ? (
-        <SettingsForm config={config} onSave={saveSettings} onHealth={() => runTask(() => call("health"))} busy={Boolean(busy)} />
+        <SettingsForm
+          config={config}
+          onSave={saveSettings}
+          onHealth={() => runTask(runSettingsHealthCheck)}
+          healthResult={settingsHealth}
+          busy={Boolean(busy)}
+        />
       ) : null}
 
-      {view === "traces" ? (
-        <Card>
-          <CardTitle>Saved Traces</CardTitle>
-          <div className="mt-4 grid gap-2">
-            {traces.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => refreshTrace(item.id)}
-                className="rounded-lg border border-slate-200 p-3 text-left text-sm hover:bg-slate-50"
-              >
-                <div className="font-medium">{item.id}</div>
-                <div className="text-slate-500">
-                  {item.status} · {item.createdAt}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      {view !== "settings" ? <div className="grid gap-6 2xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardTitle>Trace Timeline</CardTitle>
           <div className="mt-4">
@@ -306,7 +425,7 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
             </div>
           </Card>
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }
@@ -339,11 +458,13 @@ function SettingsForm({
   config,
   onSave,
   onHealth,
+  healthResult,
   busy,
 }: {
   config: MvdConfig;
   onSave: (form: FormData) => Promise<void>;
   onHealth: () => void;
+  healthResult: unknown;
   busy: boolean;
 }) {
   return (
@@ -370,6 +491,17 @@ function SettingsForm({
           </SecondaryButton>
         </div>
       </form>
+      {healthResult ? (
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-slate-950">Latest health check</h3>
+              <p className="text-sm text-slate-500">Connectivity result for the configured participant services.</p>
+            </div>
+          </div>
+          <JsonBlock value={healthResult} />
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -386,6 +518,31 @@ function extractAccessToken(value: unknown) {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function traceUseCaseLabel(trace: Pick<TraceWithEvents, "useCaseId" | "events">) {
+  const details = useCases.find((useCase) => useCase.id === trace.useCaseId);
+  return details ? `${details.id} ${details.shortTitle}` : inferUseCase(trace.events ?? []);
+}
+
+function inferUseCase(events: TraceWithEvents["events"]) {
+  const steps = new Set(events.map((event) => event.stepName));
+  if (steps.has("fetchData")) return "UC-E5 End-to-End Scenario";
+  if (steps.has("startTransfer") || steps.has("getTransfer") || steps.has("getEdrOrDataflow")) {
+    return "UC-E1 Data Discovery & Transfer";
+  }
+  if (steps.has("getContractNegotiation")) return "UC-E3 Policy Enforcement";
+  if (steps.has("startContractNegotiation")) return "UC-E3 Contract & Policy Validation";
+  if (steps.has("requestCatalog")) return "UC-E4 Federated Catalog Discovery";
+  return "Unclassified Execution";
+}
+
+function traceStatusClass(status: TraceWithEvents["status"]) {
+  const base = "rounded-full px-2 py-1 text-xs font-semibold";
+  if (status === "success") return `${base} bg-emerald-100 text-emerald-700`;
+  if (status === "error") return `${base} bg-red-100 text-red-700`;
+  if (status === "running") return `${base} bg-amber-100 text-amber-700`;
+  return `${base} bg-slate-100 text-slate-600`;
 }
 
 function isMvdStepResult(value: unknown): value is MvdStepResult {

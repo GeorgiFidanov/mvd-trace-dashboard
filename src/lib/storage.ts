@@ -14,6 +14,7 @@ type TracePatch = Partial<
     | "contractAgreementId"
     | "transferProcessId"
     | "edrId"
+    | "useCaseId"
     | "status"
   >
 >;
@@ -36,6 +37,7 @@ export function getDb() {
         contractAgreementId TEXT,
         transferProcessId TEXT,
         edrId TEXT,
+        useCaseId TEXT,
         status TEXT NOT NULL
       );
 
@@ -65,6 +67,7 @@ export function getDb() {
         value TEXT NOT NULL
       );
     `);
+    ensureColumn("traces", "useCaseId", "TEXT");
   }
 
   return db;
@@ -82,14 +85,15 @@ export function createTrace(initial: TracePatch = {}) {
     contractAgreementId: initial.contractAgreementId ?? null,
     transferProcessId: initial.transferProcessId ?? null,
     edrId: initial.edrId ?? null,
+    useCaseId: initial.useCaseId ?? null,
     status: initial.status ?? "running",
   };
 
   getDb()
     .prepare(
       `INSERT INTO traces
-      (id, createdAt, updatedAt, assetId, contractOfferId, contractNegotiationId, contractAgreementId, transferProcessId, edrId, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, createdAt, updatedAt, assetId, contractOfferId, contractNegotiationId, contractAgreementId, transferProcessId, edrId, useCaseId, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       trace.id,
@@ -101,6 +105,7 @@ export function createTrace(initial: TracePatch = {}) {
       trace.contractAgreementId,
       trace.transferProcessId,
       trace.edrId,
+      trace.useCaseId,
       trace.status,
     );
 
@@ -120,6 +125,7 @@ export function updateTrace(id: string, patch: TracePatch) {
       patch.contractAgreementId === undefined ? current.contractAgreementId : patch.contractAgreementId,
     transferProcessId: patch.transferProcessId === undefined ? current.transferProcessId : patch.transferProcessId,
     edrId: patch.edrId === undefined ? current.edrId : patch.edrId,
+    useCaseId: patch.useCaseId === undefined ? current.useCaseId : patch.useCaseId,
     status: patch.status === undefined ? current.status : patch.status,
     updatedAt: new Date().toISOString(),
   };
@@ -128,7 +134,7 @@ export function updateTrace(id: string, patch: TracePatch) {
     .prepare(
       `UPDATE traces SET
         updatedAt = ?, assetId = ?, contractOfferId = ?, contractNegotiationId = ?, contractAgreementId = ?,
-        transferProcessId = ?, edrId = ?, status = ?
+        transferProcessId = ?, edrId = ?, useCaseId = ?, status = ?
       WHERE id = ?`,
     )
     .run(
@@ -139,6 +145,7 @@ export function updateTrace(id: string, patch: TracePatch) {
       next.contractAgreementId,
       next.transferProcessId,
       next.edrId,
+      next.useCaseId,
       next.status,
       id,
     );
@@ -192,6 +199,23 @@ export function listTraces(limit = 20) {
   return (getDb().prepare("SELECT * FROM traces ORDER BY createdAt DESC LIMIT ?").all(limit) as DbTrace[]).map(mapTrace);
 }
 
+export function listTracesWithEvents(limit = 20) {
+  return listTraces(limit).map((trace) => ({ ...trace, events: getTraceEvents(trace.id) }));
+}
+
+export function deleteTrace(id: string) {
+  getDb().prepare("DELETE FROM trace_events WHERE traceId = ?").run(id);
+  return getDb().prepare("DELETE FROM traces WHERE id = ?").run(id).changes;
+}
+
+export function deleteTracesByStatus(status: TraceStatus) {
+  const traces = listTraces(500).filter((trace) => trace.status === status);
+  for (const trace of traces) {
+    deleteTrace(trace.id);
+  }
+  return traces.length;
+}
+
 export function getTraceEvents(traceId: string) {
   return (
     getDb().prepare("SELECT * FROM trace_events WHERE traceId = ? ORDER BY startedAt ASC").all(traceId) as DbEvent[]
@@ -208,6 +232,11 @@ export function saveConfig(config: MvdConfig) {
     .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
     .run("mvdConfig", JSON.stringify(config));
   return config;
+}
+
+export function checkDatabase() {
+  getDb().prepare("SELECT 1").get();
+  return { ok: true };
 }
 
 type DbTrace = Omit<Trace, "status"> & { status: TraceStatus };
@@ -233,8 +262,16 @@ function mapTrace(row: DbTrace): Trace {
     contractAgreementId: row.contractAgreementId,
     transferProcessId: row.transferProcessId,
     edrId: row.edrId,
+    useCaseId: row.useCaseId ?? null,
     status: row.status,
   };
+}
+
+function ensureColumn(table: string, column: string, type: string) {
+  const columns = getDb().prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((item) => item.name === column)) {
+    getDb().exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 function mapEvent(row: DbEvent): TraceEvent {
