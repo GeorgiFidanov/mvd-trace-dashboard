@@ -3,8 +3,13 @@
 import { useMemo, useState } from "react";
 import { isTransferReadyState, readTransferState } from "@/lib/mvdFlow";
 import { roleLabels, useCases, wizardSteps, type WizardStepDefinition, type WizardStepStatus } from "@/lib/useCases";
-import type { MvdStepResult } from "@/lib/types";
+import type { HealthCheckResult, MvdStepResult } from "@/lib/types";
 import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
+import {
+  blockingOfflineHealthServices,
+  formatHealthServiceLabel,
+  optionalOfflineHealthServices,
+} from "@/lib/healthChecks";
 import { StatusBadge } from "./StatusBadge";
 
 type StepState = Record<string, WizardStepStatus>;
@@ -105,14 +110,29 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
 
     if (step.action === "health") {
       const nextSelection = await ensureTrace(currentSelection);
-      const result = await callMvd("health");
-      if (hasOfflineService(result)) {
-        throw new Error("One or more required services are offline. Open Deployment Status for the detailed health result.");
+      const result = await callMvd<Record<string, HealthCheckResult>>("health");
+      const blocking = blockingOfflineHealthServices(result);
+      if (blocking.length) {
+        const names = blocking.map(formatHealthServiceLabel).join(", ");
+        throw new Error(`Required services are offline: ${names}. Open Deployment Status for the checked URL and error detail.`);
+      }
+      const optionalOffline = optionalOfflineHealthServices(result);
+      const healthSummary =
+        optionalOffline.length > 0
+          ? {
+              ...result,
+              optionalOfflineNote: `Optional trust/routing services are offline (${optionalOffline.map(formatHealthServiceLabel).join(", ")}). Core participant services are reachable; scenario execution can continue.`,
+            }
+          : result;
+      if (optionalOffline.length) {
+        setMessage(
+          `Core MVD services are reachable. Optional services offline: ${optionalOffline.map(formatHealthServiceLabel).join(", ")} — check Settings URLs or confirm those pods are running.`,
+        );
       }
       if (nextSelection.traceId) {
-        await recordWizardTraceEvent(nextSelection.traceId, step, "success", result);
+        await recordWizardTraceEvent(nextSelection.traceId, step, "success", healthSummary);
       }
-      return { result, selection: nextSelection };
+      return { result: healthSummary, selection: nextSelection };
     }
 
     if (step.action === "requestCatalog") {
@@ -696,14 +716,6 @@ function shortId(value: string) {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function hasOfflineService(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).some((item) => {
-    if (!item || typeof item !== "object") return false;
-    return (item as { state?: unknown }).state === "offline";
-  });
 }
 
 function isMvdStepResult(value: unknown): value is MvdStepResult {

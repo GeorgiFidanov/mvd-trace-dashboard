@@ -12,18 +12,18 @@ type ReadyResponse = {
   timestamp: string;
 };
 
-const services = [
-  ["dashboard", "Dashboard"],
-  ["consumerControlPlane", "Consumer CP"],
-  ["consumerDataPlane", "Consumer DP"],
-  ["consumerIdentityHub", "Consumer IdentityHub"],
-  ["providerControlPlane", "Provider CP"],
-  ["providerDataPlane", "Provider DP"],
-  ["providerIdentityHub", "Provider IdentityHub"],
-  ["providerVault", "Provider Vault"],
-  ["issuer", "Issuer"],
-  ["traefik", "Traefik"],
-  ["database", "Database"],
+const services: [string, string, boolean][] = [
+  ["dashboard", "Dashboard", false],
+  ["consumerControlPlane", "Consumer CP", false],
+  ["consumerDataPlane", "Consumer DP", false],
+  ["consumerIdentityHub", "Consumer IdentityHub", false],
+  ["providerControlPlane", "Provider CP", false],
+  ["providerDataPlane", "Provider DP", false],
+  ["providerIdentityHub", "Provider IdentityHub", false],
+  ["providerVault", "Provider Vault", false],
+  ["issuer", "Issuer (optional)", true],
+  ["traefik", "Traefik (optional)", true],
+  ["database", "Database", false],
 ];
 
 export function DeploymentStatusClient() {

@@ -96,7 +96,7 @@ export const wizardSteps: WizardStepDefinition[] = [
     role: "trust",
     useCaseIds: ["UC-E2", "UC-E5"],
     action: "health",
-    explanation: "Confirm that the consumer, provider, and data plane are reachable before starting a protected exchange.",
+    explanation: "Confirm that core participant services (control planes, data planes, identity hubs, vault) are reachable before starting a protected exchange. Issuer and Traefik are optional reachability probes.",
     successCriteria: "The platform can reach the configured participant services.",
     outcomeSummary: "Participants are present and ready for a trusted dataspace interaction.",
   },

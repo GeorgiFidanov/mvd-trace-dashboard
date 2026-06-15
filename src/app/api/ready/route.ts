@@ -88,7 +88,20 @@ export async function GET(request: Request) {
     traefik,
     database,
   };
-  const ready = Object.values(checks).every((check) => check.ok);
+  const requiredKeys = [
+    "consumerControlPlane",
+    "consumerDataPlane",
+    "consumerIdentityHub",
+    "providerControlPlane",
+    "providerDataPlane",
+    "providerIdentityHub",
+    "providerVault",
+    "database",
+  ] as const;
+  const ready = requiredKeys.every((key) => {
+    const check = checks[key];
+    return check.state === "success" || check.state === "warning";
+  });
 
   return Response.json(
     {
