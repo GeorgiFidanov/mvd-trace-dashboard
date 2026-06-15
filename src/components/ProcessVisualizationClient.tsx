@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { roleLabels, useCases, wizardSteps, type WizardStepRole } from "@/lib/useCases";
+import { roleLabels, technicalUseCases, useCases, wizardSteps, type WizardStepRole } from "@/lib/useCases";
+import { coreDemoStages } from "@/lib/coreDemo";
 
 type ActorLane = "Participant" | "Governance" | "Platform" | "Provider" | "Consumer";
 
@@ -138,18 +139,27 @@ const defaultSteps: ProcessStep[] = [
   },
 ];
 
-export function ProcessVisualizationClient({ compact = false, showProcessMap = true }: { compact?: boolean; showProcessMap?: boolean }) {
+export function ProcessVisualizationClient({
+  compact = false,
+  showProcessMap = true,
+  technicalOnly = false,
+}: {
+  compact?: boolean;
+  showProcessMap?: boolean;
+  technicalOnly?: boolean;
+}) {
   const [customSteps, setCustomSteps] = useState<ProcessStep[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [scenarioFilter, setScenarioFilter] = useState<(typeof scenarioFilters)[number]["id"]>("all");
   const steps = useMemo(() => [...defaultSteps, ...customSteps].sort((a, b) => a.stage - b.stage), [customSteps]);
+  const scenarioList = technicalOnly ? technicalUseCases : useCases;
   const filteredUseCases = useMemo(
     () =>
-      useCases.filter((useCase) => {
+      scenarioList.filter((useCase) => {
         if (scenarioFilter === "all") return true;
         return wizardSteps.some((step) => step.role === scenarioFilter && step.useCaseIds.includes(useCase.id));
       }),
-    [scenarioFilter],
+    [scenarioFilter, scenarioList],
   );
 
   useEffect(() => {
@@ -385,7 +395,7 @@ export function ProcessVisualizationClient({ compact = false, showProcessMap = t
             </div>
             <div className={compact ? "grid gap-4 lg:grid-cols-2" : "grid gap-5 lg:grid-cols-2 2xl:grid-cols-3"}>
               {steps.map((step) => (
-                <ProcessStepCard key={step.id} step={step} />
+                <ProcessStepCard key={step.id} step={step} wizardStepId={coreDemoStages.find((stage) => stage.stage === step.stage)?.wizardStepId} />
               ))}
             </div>
           </div>
@@ -419,6 +429,10 @@ function scenarioStatusClass(status: string) {
 
 function scenarioDssc(useCaseId: string) {
   const mapping: Record<string, { buildingBlock: string; technicalDetails: string }> = {
+    "UC-CORE": {
+      buildingBlock: "Participants & Roles; Data Offering; Usage Control; Data Exchange; Governance",
+      technicalDetails: "Five playbook steps mapped to health, catalog, negotiation, transfer/data fetch, and guided offboarding.",
+    },
     "UC-E1": {
       buildingBlock: "Publication & Discovery; Contract Management; Data Exchange",
       technicalDetails: "Catalog request, contract negotiation, transfer start, EDR/dataflow lookup, and protected data fetch.",
@@ -450,6 +464,7 @@ function scenarioDssc(useCaseId: string) {
 function scenarioProcessSteps(useCaseId: string) {
   const all = defaultSteps;
   const byUseCase: Record<string, string[]> = {
+    "UC-CORE": ["onboard", "publish", "request", "use", "revoke"],
     "UC-E1": ["publish", "request", "use"],
     "UC-E2": ["onboard"],
     "UC-E3": ["publish", "request"],
@@ -461,7 +476,7 @@ function scenarioProcessSteps(useCaseId: string) {
   return all.filter((step) => ids.includes(step.id));
 }
 
-function ProcessStepCard({ step }: { step: ProcessStep }) {
+function ProcessStepCard({ step, wizardStepId }: { step: ProcessStep; wizardStepId?: string }) {
   return (
     <article
       className="rounded-3xl border border-white/10 bg-white/[0.05] p-5 shadow-2xl shadow-slate-950/20"
@@ -525,6 +540,15 @@ function ProcessStepCard({ step }: { step: ProcessStep }) {
         </summary>
         <p className="px-4 pb-4 font-mono text-xs leading-5 text-slate-300">{step.technicalDetails}</p>
       </details>
+
+      {wizardStepId ? (
+        <Link
+          href={`/scenario-wizard?useCase=UC-CORE&step=${wizardStepId}`}
+          className="mt-5 inline-flex rounded-xl bg-pink-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-pink-200"
+        >
+          Try step {step.stage} in playground
+        </Link>
+      ) : null}
     </article>
   );
 }

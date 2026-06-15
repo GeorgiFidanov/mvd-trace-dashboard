@@ -2,6 +2,32 @@ export type UseCaseStatus = "ready" | "running" | "success" | "warning" | "faile
 export type WizardStepStatus = "pending" | "running" | "success" | "failed";
 export type WizardStepRole = "trust" | "discovery" | "policy" | "exchange" | "data";
 
+export type WizardStepDefinition = {
+  id: string;
+  title: string;
+  shortTitle: string;
+  role: WizardStepRole;
+  useCaseIds: string[];
+  action?:
+    | "health"
+    | "requestCatalog"
+    | "startContractNegotiation"
+    | "getContractNegotiation"
+    | "startTransfer"
+    | "getTransfer"
+    | "getEdrOrDataflow"
+    | "fetchData"
+    | "requestDataAccess"
+    | "accessUseData"
+    | "offboardParticipant";
+  explanation: string;
+  successCriteria: string;
+  outcomeSummary: string;
+  playbookStage?: number;
+};
+
+export type DataspaceUseCaseKind = "playground" | "technical";
+
 export type DataspaceUseCase = {
   id: string;
   title: string;
@@ -11,21 +37,22 @@ export type DataspaceUseCase = {
   successCriteria: string;
   status: UseCaseStatus;
   primaryRoute: string;
-};
-
-export type WizardStepDefinition = {
-  id: string;
-  title: string;
-  shortTitle: string;
-  role: WizardStepRole;
-  useCaseIds: string[];
-  action?: "health" | "requestCatalog" | "startContractNegotiation" | "getContractNegotiation" | "startTransfer" | "getTransfer" | "getEdrOrDataflow" | "fetchData";
-  explanation: string;
-  successCriteria: string;
-  outcomeSummary: string;
+  kind?: DataspaceUseCaseKind;
 };
 
 export const useCases: DataspaceUseCase[] = [
+  {
+    id: "UC-CORE",
+    title: "Core Demo Playground",
+    shortTitle: "Core Demo",
+    goal: "Walk through the DS4SSCC Show & Tell Core Demo — onboard, publish, request, use, and offboard — in plain language.",
+    description:
+      "The main onboarding flow for non-technical audiences. Click each of the five playbook steps, pick a catalog asset, and mix scenario labels to explore how a dataspace works.",
+    successCriteria: "All five Core Demo steps complete with trace evidence for each business action.",
+    status: "ready",
+    primaryRoute: "/scenario-wizard?useCase=UC-CORE",
+    kind: "playground",
+  },
   {
     id: "UC-E1",
     title: "Provider-to-Consumer Data Discovery & Transfer",
@@ -35,6 +62,7 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Consumer receives the correct data asset.",
     status: "ready",
     primaryRoute: "/scenario-wizard?useCase=UC-E1",
+    kind: "technical",
   },
   {
     id: "UC-E2",
@@ -45,6 +73,7 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Only valid credential holders can access protected resources.",
     status: "warning",
     primaryRoute: "/scenario-wizard?useCase=UC-E2",
+    kind: "technical",
   },
   {
     id: "UC-E3",
@@ -55,6 +84,7 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Policy engine correctly permits or denies access according to ODRL constraints.",
     status: "ready",
     primaryRoute: "/scenario-wizard?useCase=UC-E3",
+    kind: "technical",
   },
   {
     id: "UC-E4",
@@ -65,6 +95,7 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Consumer discovers and negotiates assets through federated catalogs.",
     status: "ready",
     primaryRoute: "/scenario-wizard?useCase=UC-E4",
+    kind: "technical",
   },
   {
     id: "UC-E5",
@@ -75,6 +106,7 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Identity verification, discovery, negotiation, transfer, and data retrieval all complete successfully.",
     status: "ready",
     primaryRoute: "/scenario-wizard?useCase=UC-E5",
+    kind: "technical",
   },
   {
     id: "UC-E6",
@@ -85,10 +117,79 @@ export const useCases: DataspaceUseCase[] = [
     successCriteria: "Technical findings are captured and exported.",
     status: "warning",
     primaryRoute: "/scenario-wizard?useCase=UC-E6",
+    kind: "technical",
   },
 ];
 
+export const playgroundUseCases = useCases.filter((useCase) => useCase.kind === "playground");
+export const technicalUseCases = useCases.filter((useCase) => useCase.kind !== "playground");
+
 export const wizardSteps: WizardStepDefinition[] = [
+  {
+    id: "core-onboard",
+    title: "Onboard a Participant",
+    shortTitle: "Onboard",
+    role: "trust",
+    useCaseIds: ["UC-CORE"],
+    action: "health",
+    playbookStage: 1,
+    explanation:
+      "Register the consumer and provider side of the dataspace: confirm identities, trust services, and connector endpoints are ready before any data is shared.",
+    successCriteria: "Participant services are reachable and trust prerequisites are in place.",
+    outcomeSummary: "The participant is onboarded and ready for governed data sharing.",
+  },
+  {
+    id: "core-publish",
+    title: "Create / Publish a Data Offer",
+    shortTitle: "Publish",
+    role: "discovery",
+    useCaseIds: ["UC-CORE"],
+    action: "requestCatalog",
+    playbookStage: 2,
+    explanation:
+      "Browse what the provider has already published in the catalog — each entry is a data product with metadata and usage rules. Pick a different asset below to mix and match your demo story.",
+    successCriteria: "At least one data product with a contract offer appears in the catalog.",
+    outcomeSummary: "A governed data offer is visible and ready to request.",
+  },
+  {
+    id: "core-request-access",
+    title: "Request Data Access",
+    shortTitle: "Request",
+    role: "policy",
+    useCaseIds: ["UC-CORE"],
+    action: "requestDataAccess",
+    playbookStage: 3,
+    explanation:
+      "The consumer selects a catalog product, submits an access request, and waits while identity and ODRL policy checks run until an agreement is created.",
+    successCriteria: "Access is requested and a contract agreement is created under policy.",
+    outcomeSummary: "The consumer received permission to use the selected data product.",
+  },
+  {
+    id: "core-access-data",
+    title: "Access & Use Data",
+    shortTitle: "Use data",
+    role: "data",
+    useCaseIds: ["UC-CORE"],
+    action: "accessUseData",
+    playbookStage: 4,
+    explanation:
+      "Start the secure exchange, wait for the data plane to open, and retrieve the protected payload — the same outcome an application or dashboard would show to an end user.",
+    successCriteria: "Data moves through the controlled exchange path and the payload is received.",
+    outcomeSummary: "The consumer successfully accessed and used the provider data.",
+  },
+  {
+    id: "core-offboard",
+    title: "Offboard / Revoke Access",
+    shortTitle: "Offboard",
+    role: "trust",
+    useCaseIds: ["UC-CORE"],
+    action: "offboardParticipant",
+    playbookStage: 5,
+    explanation:
+      "Walk through how governance removes a participant or revokes access. In this playground the step records the business checklist; production deployments would revoke credentials and deny the next request.",
+    successCriteria: "The offboarding and revocation process is explained with audit evidence linked to this run.",
+    outcomeSummary: "Access revocation is documented and a follow-up request would be denied in production.",
+  },
   {
     id: "identity-verification",
     title: "Identity Verification",

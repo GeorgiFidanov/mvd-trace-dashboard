@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { isTransferReadyState, readTransferState } from "@/lib/mvdFlow";
+import { useEffect, useMemo, useState } from "react";
+import { coreDemoStageForWizardStep, isCoreDemoUseCase } from "@/lib/coreDemo";
+import { extractCatalogOffers, isTransferReadyState, readTransferState, type CatalogOfferOption } from "@/lib/mvdFlow";
 import { roleLabels, useCases, wizardSteps, type WizardStepDefinition, type WizardStepStatus } from "@/lib/useCases";
 import type { HealthCheckResult, MvdStepResult } from "@/lib/types";
 import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
@@ -21,6 +22,20 @@ type Selection = {
   contractAgreementId?: string;
   transferProcessId?: string;
   accessToken?: string;
+  catalogOffers?: CatalogOfferOption[];
+};
+
+type PlaygroundLabels = {
+  consumerLabel: string;
+  providerLabel: string;
+  scenarioNote: string;
+};
+
+const playgroundStorageKey = "mvd-playground-labels";
+const defaultPlaygroundLabels: PlaygroundLabels = {
+  consumerLabel: "City consumer organisation",
+  providerLabel: "Data provider organisation",
+  scenarioNote: "Explore how governed data sharing works step by step.",
 };
 type StepExecution = { result: unknown; selection: Selection };
 
@@ -30,9 +45,17 @@ const EDR_POLL_DELAY_MS = 1000;
 const TRANSFER_POLL_ATTEMPTS = 20;
 const TRANSFER_POLL_DELAY_MS = 1000;
 
-export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseCase?: string }) {
+export function ScenarioWizardClient({
+  initialUseCase = "UC-CORE",
+  initialStepId,
+}: {
+  initialUseCase?: string;
+  initialStepId?: string;
+}) {
   const [selectedUseCase, setSelectedUseCase] = useState(initialUseCase);
-  const [activeStepId, setActiveStepId] = useState(wizardSteps[0].id);
+  const [playgroundLabels, setPlaygroundLabels] = useState<PlaygroundLabels>(defaultPlaygroundLabels);
+  const coreSteps = useMemo(() => wizardSteps.filter((step) => step.useCaseIds.includes("UC-CORE")), []);
+  const [activeStepId, setActiveStepId] = useState(initialStepId ?? coreSteps[0]?.id ?? wizardSteps[0].id);
   const [states, setStates] = useState<StepState>(initialStates);
   const [selection, setSelection] = useState<Selection>({});
   const [lastResult, setLastResult] = useState<unknown>(null);
@@ -46,6 +69,32 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
   const selectedUseCaseDetails = useCases.find((useCase) => useCase.id === selectedUseCase) ?? useCases[0];
   const activeStep = visibleSteps.find((step) => step.id === activeStepId) ?? visibleSteps[0];
   const progress = Math.round((visibleSteps.filter((step) => states[step.id] === "success").length / visibleSteps.length) * 100);
+  const coreDemoMode = isCoreDemoUseCase(selectedUseCase);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const saved = window.localStorage.getItem(playgroundStorageKey);
+      if (saved) setPlaygroundLabels(JSON.parse(saved) as PlaygroundLabels);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function updatePlaygroundLabels(patch: Partial<PlaygroundLabels>) {
+    setPlaygroundLabels((current) => {
+      const next = { ...current, ...patch };
+      window.localStorage.setItem(playgroundStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function selectCatalogOffer(offer: CatalogOfferOption) {
+    setSelection((current) => ({
+      ...current,
+      assetId: offer.assetId,
+      contractOfferId: offer.contractOfferId,
+    }));
+    setMessage(`Selected “${offer.title}” for the next access request. Run step 3 when ready.`);
+  }
 
   async function runScenario() {
     reset(false);
@@ -138,15 +187,138 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
     if (step.action === "requestCatalog") {
       const result = await callMvd<MvdStepResult>("requestCatalog", { traceId: currentSelection.traceId, useCaseId: selectedUseCase });
       const ids = result.event.extractedIds;
+      const catalogOffers = extractCatalogOffers(result.data);
+      const preferred = catalogOffers.find((offer) => offer.assetId === ids.assetId) ?? catalogOffers[0];
       return {
-        result,
+        result: { ...result, catalogOffers },
         selection: {
           ...currentSelection,
-        traceId: result.trace.id,
-        assetId: ids.assetId ?? result.trace.assetId ?? undefined,
-        contractOfferId: ids.contractOfferId ?? result.trace.contractOfferId ?? undefined,
+          traceId: result.trace.id,
+          assetId: preferred?.assetId ?? ids.assetId ?? result.trace.assetId ?? undefined,
+          contractOfferId: preferred?.contractOfferId ?? ids.contractOfferId ?? result.trace.contractOfferId ?? undefined,
+          catalogOffers,
         },
       };
+    }
+
+    if (step.action === "requestDataAccess") {
+      if (!currentSelection.contractOfferId) {
+        throw new Error("Pick a data product from the catalog first (run step 2 — Create / Publish a Data Offer).");
+      }
+      const nextSelection = await ensureTrace(currentSelection);
+      const offerSummary = {
+        summary: "Data product selected for access request",
+        assetId: currentSelection.assetId,
+        contractOfferId: currentSelection.contractOfferId,
+        playground: playgroundLabels,
+      };
+      if (nextSelection.traceId) {
+        await recordWizardTraceEvent(nextSelection.traceId, step, "success", { phase: "offer-selected", ...offerSummary });
+      }
+
+      let result = await callMvd<MvdStepResult>("startContractNegotiation", {
+        traceId: nextSelection.traceId,
+        useCaseId: selectedUseCase,
+        offerId: currentSelection.contractOfferId,
+        assetId: currentSelection.assetId,
+      });
+      const selection: Selection = {
+        ...nextSelection,
+        traceId: result.trace.id,
+        contractNegotiationId: result.event.extractedIds.contractNegotiationId ?? result.trace.contractNegotiationId ?? undefined,
+        contractAgreementId: result.event.extractedIds.contractAgreementId ?? result.trace.contractAgreementId ?? undefined,
+      };
+
+      let agreementId = selection.contractAgreementId;
+      for (let i = 0; i < 8 && !agreementId; i += 1) {
+        if (result.event.extractedIds.state === "TERMINATED") {
+          throw new Error("Policy validation terminated the access request.");
+        }
+        await delay(900);
+        result = await callMvd<MvdStepResult>("getContractNegotiation", {
+          traceId: selection.traceId,
+          useCaseId: selectedUseCase,
+          negotiationId: selection.contractNegotiationId,
+        });
+        agreementId = result.event.extractedIds.contractAgreementId ?? result.trace.contractAgreementId ?? selection.contractAgreementId;
+      }
+      if (!agreementId) {
+        throw new Error("Access request did not produce an agreement yet. Try this step again after the provider finalizes negotiation.");
+      }
+      return {
+        result: { negotiation: result, agreementId, playground: playgroundLabels },
+        selection: { ...selection, contractAgreementId: agreementId },
+      };
+    }
+
+    if (step.action === "accessUseData") {
+      if (!currentSelection.contractAgreementId) {
+        throw new Error("Complete step 3 — Request Data Access — before accessing data.");
+      }
+      const transferResult = await callMvd<MvdStepResult>("startTransfer", {
+        traceId: currentSelection.traceId,
+        useCaseId: selectedUseCase,
+        agreementId: currentSelection.contractAgreementId,
+        assetId: currentSelection.assetId,
+      });
+      const workingSelection: Selection = {
+        ...currentSelection,
+        transferProcessId: transferResult.event.extractedIds.transferProcessId ?? transferResult.trace.transferProcessId ?? undefined,
+      };
+      if (!workingSelection.transferProcessId) {
+        throw new Error("Transfer could not be started. Check Advanced Diagnostics for the provider response.");
+      }
+
+      setMessage("Checking transfer state before opening the consumer data-plane proxy flow.");
+      await pollTransferReady({
+        callMvd,
+        traceId: workingSelection.traceId,
+        useCaseId: selectedUseCase,
+        transferProcessId: workingSelection.transferProcessId,
+        onWaiting: setMessage,
+      });
+      setMessage(
+        "Checking whether the consumer data plane has opened a proxy dataflow for this transfer. " +
+          "HTTP 204 means the flow is not open yet — the dashboard will wait and retry automatically.",
+      );
+      const { edr, accessToken } = await pollOpenDataflow({
+        callMvd,
+        traceId: workingSelection.traceId,
+        useCaseId: selectedUseCase,
+        transferProcessId: workingSelection.transferProcessId,
+        onWaiting: setMessage,
+      });
+      setMessage("The proxy dataflow is open — fetching the protected data payload now.");
+      const fetchResult = await callMvd("fetchData", {
+        traceId: workingSelection.traceId,
+        useCaseId: selectedUseCase,
+        transferProcessId: workingSelection.transferProcessId,
+        accessToken,
+      });
+      return {
+        result: { transfer: transferResult, edr, fetch: fetchResult, playground: playgroundLabels },
+        selection: { ...workingSelection, accessToken },
+      };
+    }
+
+    if (step.action === "offboardParticipant") {
+      const nextSelection = await ensureTrace(currentSelection);
+      const summary = {
+        mode: "guided-playground",
+        playbookStep: 5,
+        checklist: [
+          "Revoke participant trust credentials or unsubscribe the account",
+          "Remove or expire the contract agreement / access token",
+          "Retry a data request and confirm access is denied",
+        ],
+        playground: playgroundLabels,
+        note:
+          "This playground records the offboarding story for Show & Tell. In production, governance would revoke credentials in IdentityHub and policy enforcement would deny the next request.",
+      };
+      if (nextSelection.traceId) {
+        await recordWizardTraceEvent(nextSelection.traceId, step, "success", summary);
+      }
+      return { result: summary, selection: nextSelection };
     }
 
     if (step.action === "startContractNegotiation") {
@@ -301,9 +473,13 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
     const traceId = nextSelection.traceId;
     if (traceId) {
       const message = error instanceof Error ? error.message : String(error);
-      const mvdStepFailed = Boolean(step.action && step.action !== "health");
+      const mvdStepFailed = Boolean(
+        step.action &&
+          step.action !== "health" &&
+          step.action !== "offboardParticipant",
+      );
       // MVD-backed steps record HTTP failures themselves, but fetchData can fail after only 204 responses.
-      if (!mvdStepFailed || step.action === "fetchData") {
+      if (!mvdStepFailed || step.action === "fetchData" || step.action === "accessUseData") {
         const now = new Date().toISOString();
         await fetch("/api/traces", {
           method: "PUT",
@@ -361,24 +537,64 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
     setActiveStepId(visibleSteps[0]?.id ?? wizardSteps[0].id);
   }
 
+  function getStepToRun() {
+    return visibleSteps.find((step) => states[step.id] === "pending" || states[step.id] === "failed") ?? null;
+  }
+
+  const stepToRun = getStepToRun();
+  const isRunning = visibleSteps.some((step) => states[step.id] === "running");
+
+  function runNextStep() {
+    const step = getStepToRun();
+    if (!step) return;
+    setActiveStepId(step.id);
+    void runStep(step).catch(() => undefined);
+  }
+
+  const catalogReady = Boolean(states["core-publish"] === "success" && selection.catalogOffers?.length);
+  const showAssetPicker = coreDemoMode && catalogReady && activeStepId === "core-request-access";
+  const selectedCatalogOffer = selection.catalogOffers?.find(
+    (offer) => offer.assetId === selection.assetId && offer.contractOfferId === selection.contractOfferId,
+  );
+  const showLockedAsset =
+    coreDemoMode &&
+    catalogReady &&
+    !showAssetPicker &&
+    Boolean(selectedCatalogOffer) &&
+    (activeStepId === "core-access-data" || activeStepId === "core-offboard");
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-cyan-400/15 via-slate-900 to-indigo-500/10 p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Dataspace Scenario Wizard</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
+          {coreDemoMode ? "Core Demo Playground · Show & Tell Section 2" : "Dataspace Scenario Wizard"}
+        </p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">Validate a dataspace use case step by step</h1>
+            <h1 className="text-3xl font-bold text-white">
+              {coreDemoMode
+                ? "Explore the dataspace in five guided steps"
+                : "Validate a dataspace use case step by step"}
+            </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-              Run the scenario as a guided educational workflow. The wizard explains what happened and why, while the
-              trace ID is kept for Advanced Diagnostics.
+              {coreDemoMode
+                ? "Click each step like a FIWARE-style guided demo: onboard a participant, browse published data products, request access, use the data, and walk through offboarding. Mix assets and labels to tell your own story — technical traces stay available in Advanced Diagnostics."
+                : "Run the scenario as a guided educational workflow. The wizard explains what happened and why, while the trace ID is kept for Advanced Diagnostics."}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200" onClick={() => reset()}>
               Replay
             </button>
+            <button
+              className="rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50"
+              disabled={!stepToRun || isRunning}
+              onClick={() => runNextStep()}
+            >
+              {stepToRun ? `Run Next Step (${stepToRun.shortTitle})` : "All steps complete"}
+            </button>
             <button className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => void runScenario().catch(() => undefined)}>
-              Run Scenario
+              Run Full Scenario
             </button>
           </div>
         </div>
@@ -391,11 +607,24 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
               reset();
             }}
           >
-            {useCases.map((useCase) => (
-              <option key={useCase.id} value={useCase.id}>
-                {useCase.id} - {useCase.shortTitle}
-              </option>
-            ))}
+            <optgroup label="Main demo flow">
+              {useCases
+                .filter((useCase) => useCase.kind === "playground")
+                .map((useCase) => (
+                  <option key={useCase.id} value={useCase.id}>
+                    {useCase.id} - {useCase.shortTitle}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Technical validation scenarios">
+              {useCases
+                .filter((useCase) => useCase.kind !== "playground")
+                .map((useCase) => (
+                  <option key={useCase.id} value={useCase.id}>
+                    {useCase.id} - {useCase.shortTitle}
+                  </option>
+                ))}
+            </optgroup>
           </select>
           <div className="text-sm font-semibold text-cyan-100">{progress}% complete</div>
         </div>
@@ -415,6 +644,28 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
           <p className="mt-3 text-sm leading-6 text-slate-300">{selectedUseCaseDetails.goal}</p>
           <p className="mt-2 text-sm text-slate-400">Success: {selectedUseCaseDetails.successCriteria}</p>
         </div>
+        {coreDemoMode ? (
+          <div className="mt-5 grid gap-4 rounded-[2rem] border border-pink-300/25 bg-pink-300/10 p-5 lg:grid-cols-3">
+            <PlaygroundField
+              label="Consumer in your story"
+              value={playgroundLabels.consumerLabel}
+              onChange={(value) => updatePlaygroundLabels({ consumerLabel: value })}
+              placeholder="e.g. City mobility office"
+            />
+            <PlaygroundField
+              label="Provider in your story"
+              value={playgroundLabels.providerLabel}
+              onChange={(value) => updatePlaygroundLabels({ providerLabel: value })}
+              placeholder="e.g. Regional data hub"
+            />
+            <PlaygroundField
+              label="What are you exploring?"
+              value={playgroundLabels.scenarioNote}
+              onChange={(value) => updatePlaygroundLabels({ scenarioNote: value })}
+              placeholder="e.g. Sharing air-quality data for urban planning"
+            />
+          </div>
+        ) : null}
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Plain-language scenario result</p>
           <p className="mt-2 text-sm leading-6 text-slate-200">
@@ -425,18 +676,26 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
       </header>
 
       <section className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/10 p-5">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Steps</p>
-        <h2 className="mt-2 text-2xl font-bold text-white">Follow the scenario one decision at a time</h2>
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
+          {coreDemoMode ? "Core Demo · 5 playbook steps" : "Steps"}
+        </p>
+        <h2 className="mt-2 text-2xl font-bold text-white">
+          {coreDemoMode ? "Click a step to explore — run one at a time or the full flow" : "Follow the scenario one decision at a time"}
+        </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-          Select a step on the left to see what the business user sees, what the platform does, and which evidence is recorded.
-          Run the full scenario from the top, or run one step from the selected-step panel.
+          {coreDemoMode
+            ? "Each card matches the DS4SSCC Show & Tell Core Demo. Complete step 2 first — asset selection unlocks on step 3."
+            : "Select a step on the left to see what the business user sees, what the platform does, and which evidence is recorded. Run the full scenario from the top, or run one step from the selected-step panel."}
         </p>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5">
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+        <section className="min-w-0 flex-1 rounded-[2rem] border border-white/10 bg-white/[0.04] p-5">
           <div className="grid gap-4">
-            {visibleSteps.map((step, index) => (
+            {visibleSteps.map((step, index) => {
+              const stageNumber = step.playbookStage ?? index + 1;
+              const coreStage = coreDemoStageForWizardStep(step.id);
+              return (
               <button
                 key={step.id}
                 className={`group grid gap-4 rounded-3xl border p-4 text-left transition md:grid-cols-[auto_1fr_auto] md:items-center ${
@@ -445,20 +704,27 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
                 onClick={() => setActiveStepId(step.id)}
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-cyan-200">
-                  {index + 1}
+                  {stageNumber}
                 </span>
                 <span>
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{roleLabels[step.role]}</span>
+                  {coreStage ? (
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-pink-200">
+                      Playbook step {coreStage.stage} · {coreStage.playbookTiming}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{roleLabels[step.role]}</span>
+                  )}
                   <span className="mt-1 block text-lg font-semibold text-white">{step.title}</span>
                   <span className="mt-1 block text-sm text-slate-400">{step.successCriteria}</span>
                 </span>
                 <StatusBadge status={states[step.id]} />
               </button>
-            ))}
+            );
+            })}
           </div>
         </section>
 
-        <aside className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-5">
+        <aside className="w-full shrink-0 rounded-[2rem] border border-white/10 bg-slate-900/90 p-5 xl:sticky xl:top-6 xl:w-[380px] xl:self-start">
           {activeStep ? (
             <>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">Selected Step</p>
@@ -505,14 +771,57 @@ export function ScenarioWizardClient({ initialUseCase = "UC-E5" }: { initialUseC
                   <ScenarioInfo label="Architectural Alignment & Audit Criteria" value={stepDssc(activeStep).auditCriteria} />
                 </div>
               </details>
+              {showAssetPicker ? (
+                <div className="mt-4 rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Choose a data product</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Unlocked for step 3 — pick one before running the access request.</p>
+                  <div className="mt-3 grid gap-2">
+                    {selection.catalogOffers?.map((offer) => {
+                      const selected =
+                        selection.assetId === offer.assetId && selection.contractOfferId === offer.contractOfferId;
+                      return (
+                        <button
+                          key={`${offer.assetId}-${offer.contractOfferId}`}
+                          type="button"
+                          disabled={isRunning}
+                          onClick={() => selectCatalogOffer(offer)}
+                          className={`rounded-xl border p-3 text-left transition disabled:opacity-60 ${
+                            selected
+                              ? "border-emerald-300 bg-emerald-300/15"
+                              : "border-white/10 bg-slate-950/60 hover:border-emerald-300/40"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-white">{offer.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-400">{offer.description}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {showLockedAsset && selectedCatalogOffer ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected data product</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{selectedCatalogOffer.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Locked for this run — replay to choose a different asset.</p>
+                </div>
+              ) : null}
               <button
                 className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
                 disabled={states[activeStep.id] === "running"}
                 onClick={() => void runStep(activeStep).catch(() => undefined)}
               >
-                {states[activeStep.id] === "running" ? "Running..." : "Run Individual Step"}
+                {states[activeStep.id] === "running" ? "Running..." : "Run This Step"}
               </button>
-              {states[activeStep.id] === "running" && activeStep.id === "data-retrieval" ? (
+              <button
+                className="mt-3 w-full rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50"
+                disabled={!stepToRun || isRunning}
+                onClick={() => runNextStep()}
+              >
+                {stepToRun ? `Run Next Step · ${stepToRun.title}` : "All steps complete"}
+              </button>
+              {states[activeStep.id] === "running" &&
+              (activeStep.id === "data-retrieval" || activeStep.id === "core-access-data") ? (
                 <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
                   Data retrieval in progress. HTTP 204 from the consumer data plane means the proxy dataflow is not open yet — the
                   dashboard will wait and retry automatically. See the plain-language result above for live status.
@@ -724,6 +1033,11 @@ function isMvdStepResult(value: unknown): value is MvdStepResult {
 
 function stepActors(step: WizardStepDefinition) {
   const actors: Record<string, string[]> = {
+    "core-onboard": ["Consumer POV", "Governance / Trust"],
+    "core-publish": ["Provider POV", "Usage Control"],
+    "core-request-access": ["Consumer POV", "Provider Approval", "Agreement"],
+    "core-access-data": ["Consumer POV", "Verifier POV", "Provider Data"],
+    "core-offboard": ["Governance POV", "Provider Control"],
     "identity-verification": ["Consumer POV", "Governance / Trust"],
     "catalog-discovery": ["Consumer POV", "Provider POV"],
     "offer-selection": ["Consumer POV", "Governance / Trust"],
@@ -738,6 +1052,11 @@ function stepActors(step: WizardStepDefinition) {
 
 function stepMiniSteps(step: WizardStepDefinition) {
   const miniSteps: Record<string, string[]> = {
+    "core-onboard": ["Register participant identity", "Validate trust services", "Confirm connectors are reachable"],
+    "core-publish": ["Browse published catalog", "Review metadata and policy", "Select a data product to explore"],
+    "core-request-access": ["Choose catalog product", "Submit access request", "Wait for policy agreement"],
+    "core-access-data": ["Start secure exchange", "Receive access token", "View protected data result"],
+    "core-offboard": ["Revoke trust or permission", "Retry access attempt", "Confirm denial in production"],
     "identity-verification": ["Check participant services", "Confirm trust services respond", "Record readiness evidence"],
     "catalog-discovery": ["Ask for available offers", "Read catalog response", "Extract asset and offer IDs"],
     "offer-selection": ["Review discovered offer", "Confirm policy terms", "Prepare access request"],
@@ -756,6 +1075,31 @@ function stepMiniSteps(step: WizardStepDefinition) {
 
 function stepBusinessContext(step: WizardStepDefinition) {
   const contexts: Record<string, { userSees: string; systemDoes: string; actor: string }> = {
+    "core-onboard": {
+      userSees: "A new participant is registered and shown as ready for trusted data sharing.",
+      systemDoes: "The dashboard checks connector, IdentityHub, vault, and trust service reachability.",
+      actor: "Participant with Governance / Trust",
+    },
+    "core-publish": {
+      userSees: "Published data products appear in the catalog with titles, descriptions, and usage rules.",
+      systemDoes: "The consumer asks the provider catalog what data products are available (MVD pre-seeds provider assets).",
+      actor: "Provider",
+    },
+    "core-request-access": {
+      userSees: "The consumer picks a product and sees whether access is granted under policy.",
+      systemDoes: "Contract negotiation runs while identity and ODRL policy checks execute.",
+      actor: "Consumer with Provider approval",
+    },
+    "core-access-data": {
+      userSees: "The requested data appears after a short wait while the secure exchange opens.",
+      systemDoes: "Transfer starts, the data plane opens a proxy flow, and the protected payload is fetched.",
+      actor: "Consumer with Platform",
+    },
+    "core-offboard": {
+      userSees: "Governance removes access and explains that the next request would be denied.",
+      systemDoes: "This playground records the offboarding checklist; production would revoke credentials and enforce denial.",
+      actor: "Governance / Trust",
+    },
     "identity-verification": {
       userSees: "Participants appear ready to join a trusted exchange.",
       systemDoes: "The dashboard checks participant, data plane, IdentityHub, Vault, Issuer, and Traefik reachability.",
@@ -797,6 +1141,15 @@ function stepBusinessContext(step: WizardStepDefinition) {
 }
 
 function stepDssc(step: WizardStepDefinition) {
+  const coreStage = coreDemoStageForWizardStep(step.id);
+  if (coreStage) {
+    return {
+      buildingBlock: coreStage.buildingBlocks.join(" · "),
+      protocol: "Dataspace Protocol · ODRL · W3C DID / VC (where applicable)",
+      serviceDefinition: "EDC MVD connector services mapped to DS4SSCC building blocks",
+      auditCriteria: `${coreStage.showAndDescribe.join("; ")} — evidence recorded in Execution History.`,
+    };
+  }
   const mapping: Record<string, { buildingBlock: string; protocol: string; serviceDefinition: string; auditCriteria: string }> = {
     "identity-verification": {
       buildingBlock: "Trust Framework; Identity & Attestation Management",
@@ -842,6 +1195,30 @@ function stepDssc(step: WizardStepDefinition) {
       serviceDefinition: "Validation Reporting",
       auditCriteria: "Findings must be linked to traces and understandable by technical and non-technical reviewers.",
     }
+  );
+}
+
+function PlaygroundField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="grid gap-2 text-sm">
+      <span className="font-semibold text-pink-100">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+      />
+    </label>
   );
 }
 

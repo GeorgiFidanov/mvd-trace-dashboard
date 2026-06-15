@@ -52,11 +52,11 @@ export default function FiwarePage() {
               language, and DSSC mappings. The executable implementation remains the EDC MVD track for now.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/use-cases" className="rounded-xl bg-pink-300 px-4 py-2 text-sm font-black uppercase tracking-wide text-slate-950 hover:bg-pink-200">
-                Open available EDC track
+              <Link href="/scenario-wizard" className="rounded-xl bg-pink-300 px-4 py-2 text-sm font-black uppercase tracking-wide text-slate-950 hover:bg-pink-200">
+                Open Core Demo Playground
               </Link>
-              <Link href="/" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm font-black uppercase tracking-wide text-slate-100 hover:bg-white/10">
-                Back to platform choice
+              <Link href="/use-cases" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm font-black uppercase tracking-wide text-slate-100 hover:bg-white/10">
+                Technical validation scenarios
               </Link>
             </div>
           </div>

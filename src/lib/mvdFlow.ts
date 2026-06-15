@@ -154,21 +154,49 @@ export function buildTransferRequest(config: MvdConfig, agreementId: string, ass
 }
 
 export function extractCatalogSelection(catalog: unknown, preferredAssetId = "asset-1") {
+  const offers = extractCatalogOffers(catalog);
+  const match = offers.find((offer) => offer.assetId === preferredAssetId) ?? offers[0];
+  return {
+    assetId: match?.assetId,
+    contractOfferId: match?.contractOfferId,
+  };
+}
+
+export type CatalogOfferOption = {
+  assetId: string;
+  contractOfferId: string;
+  title: string;
+  description: string;
+};
+
+export function extractCatalogOffers(catalog: unknown): CatalogOfferOption[] {
   const body = catalog as Record<string, unknown>;
   const datasets = arrayOfRecords(
     body.dataset ?? body["dcat:dataset"] ?? body["https://www.w3.org/ns/dcat#dataset"],
   );
-  const dataset =
-    datasets.find((item) => item["@id"] === preferredAssetId || item.id === preferredAssetId) ?? datasets[0];
-  const policies = arrayOfRecords(
-    dataset?.hasPolicy ?? dataset?.["odrl:hasPolicy"] ?? dataset?.["http://www.w3.org/ns/odrl/2/hasPolicy"],
-  );
-  const policy = policies.find(isOffer) ?? policies[0] ?? asRecord(dataset?.hasPolicy ?? dataset?.["odrl:hasPolicy"]);
 
-  return {
-    assetId: stringOrUndefined(dataset?.["@id"] ?? dataset?.id ?? dataset?.["https://w3id.org/edc/v0.0.1/ns/id"]),
-    contractOfferId: findId(policy) ?? findId(dataset, isOffer),
-  };
+  return datasets.flatMap((dataset) => {
+    const assetId = stringOrUndefined(
+      dataset["@id"] ?? dataset.id ?? dataset["https://w3id.org/edc/v0.0.1/ns/id"],
+    );
+    if (!assetId) return [];
+
+    const policies = arrayOfRecords(
+      dataset.hasPolicy ?? dataset["odrl:hasPolicy"] ?? dataset["http://www.w3.org/ns/odrl/2/hasPolicy"],
+    );
+    const policy = policies.find(isOffer) ?? policies[0] ?? asRecord(dataset.hasPolicy ?? dataset["odrl:hasPolicy"]);
+    const contractOfferId = findId(policy) ?? findId(dataset, isOffer);
+    if (!contractOfferId) return [];
+
+    const title =
+      stringOrUndefined(dataset.title ?? dataset["https://www.w3.org/ns/dcat#title"] ?? dataset.name) ?? assetId;
+    const description =
+      stringOrUndefined(
+        dataset.description ?? dataset["https://www.w3.org/ns/dcat#description"] ?? dataset["dcat:description"],
+      ) ?? "Published data product with attached usage policy.";
+
+    return [{ assetId, contractOfferId, title, description }];
+  });
 }
 
 export function readTransferState(body: unknown): string | undefined {

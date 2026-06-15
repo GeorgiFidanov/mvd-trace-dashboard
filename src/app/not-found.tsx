@@ -17,13 +17,13 @@ export default function NotFound() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link href="/" className="rounded-xl bg-pink-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-pink-200">
-                  Back to platform choice
+                  Back to overview
                 </Link>
                 <Link
-                  href="/use-cases"
+                  href="/scenario-wizard"
                   className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-slate-100 hover:bg-white/10"
                 >
-                  Open EDC scenarios
+                  Open Core Demo
                 </Link>
                 <Link
                   href="/architecture"

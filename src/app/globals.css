@@ -17,3 +17,100 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* FIWARE light theme — override hard-coded dark surfaces inside pages */
+[data-theme="fiware"] .text-white {
+  color: #1c1917;
+}
+
+[data-theme="fiware"] .text-slate-100,
+[data-theme="fiware"] .text-slate-200 {
+  color: #292524;
+}
+
+[data-theme="fiware"] .text-slate-300 {
+  color: #44403c;
+}
+
+[data-theme="fiware"] .text-slate-400,
+[data-theme="fiware"] .text-slate-500 {
+  color: #78716c;
+}
+
+[data-theme="fiware"] .text-cyan-100,
+[data-theme="fiware"] .text-cyan-200 {
+  color: #c2410c;
+}
+
+[data-theme="fiware"] .text-pink-100,
+[data-theme="fiware"] .text-pink-200 {
+  color: #be185d;
+}
+
+[data-theme="fiware"] .text-emerald-100,
+[data-theme="fiware"] .text-emerald-200 {
+  color: #047857;
+}
+
+[data-theme="fiware"] .text-amber-100 {
+  color: #b45309;
+}
+
+[data-theme="fiware"] [class*="bg-slate-950"],
+[data-theme="fiware"] [class*="bg-slate-900"],
+[data-theme="fiware"] [class*="bg-[#11141c]"],
+[data-theme="fiware"] [class*="bg-[#160f05]"],
+[data-theme="fiware"] [class*="bg-[#120c04]"] {
+  background-color: rgb(254 215 170 / 0.72) !important;
+}
+
+[data-theme="fiware"] [class*="bg-white/5"],
+[data-theme="fiware"] [class*="bg-white/10"],
+[data-theme="fiware"] [class*="bg-white/\\[0.04\\]"],
+[data-theme="fiware"] [class*="bg-white/\\[0.06\\]"] {
+  background-color: rgb(253 186 116 / 0.38) !important;
+}
+
+[data-theme="fiware"] [class*="via-slate-900"],
+[data-theme="fiware"] [class*="from-slate-900"] {
+  --tw-gradient-via: #ffedd5;
+  --tw-gradient-from: rgb(251 146 60 / 0.2);
+}
+
+[data-theme="fiware"] [class*="border-white/10"],
+[data-theme="fiware"] [class*="border-white/5"] {
+  border-color: rgb(251 146 60 / 0.45) !important;
+}
+
+[data-theme="fiware"] [class*="bg-cyan-300/10"],
+[data-theme="fiware"] [class*="bg-cyan-300/15"] {
+  background-color: rgb(255 237 213 / 0.85) !important;
+}
+
+[data-theme="fiware"] [class*="bg-pink-300/10"],
+[data-theme="fiware"] [class*="bg-pink-300/15"],
+[data-theme="fiware"] [class*="bg-pink-400/10"] {
+  background-color: rgb(252 231 243 / 0.85) !important;
+}
+
+[data-theme="fiware"] [class*="bg-emerald-300/10"],
+[data-theme="fiware"] [class*="bg-emerald-300/15"] {
+  background-color: rgb(209 250 229 / 0.75) !important;
+}
+
+[data-theme="fiware"] select,
+[data-theme="fiware"] input,
+[data-theme="fiware"] textarea {
+  background-color: #fffbeb !important;
+  color: #1c1917 !important;
+  border-color: rgb(254 215 170 / 0.8) !important;
+}
+
+[data-theme="fiware"] select option {
+  background-color: #fff7ed;
+  color: #1c1917;
+}
+
+[data-theme="fiware"] .hover\:bg-white\/10:hover {
+  background-color: rgb(254 215 170 / 0.35) !important;
+}
