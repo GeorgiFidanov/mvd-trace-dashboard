@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Trace, TraceEvent } from "@/lib/types";
+import { displayTraceEvents, effectiveTraceStatus } from "@/lib/traceDiagnosis";
 import { useCases } from "@/lib/useCases";
 import { StatusBadge } from "./StatusBadge";
 
@@ -37,11 +38,13 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
     () =>
       traces.map((trace) => {
         const events = trace.events ?? [];
-        const duration = events.reduce((sum, event) => sum + (event.durationMs ?? 0), 0);
+        const visibleEvents = displayTraceEvents(events);
+        const duration = visibleEvents.reduce((sum, event) => sum + (event.durationMs ?? 0), 0);
         const useCaseId = trace.useCaseId ?? inferUseCaseId(events);
         const details = useCases.find((item) => item.id === useCaseId);
         return {
           trace,
+          events,
           useCaseId,
           useCase: details ? `${details.id} ${details.shortTitle}` : "Unclassified Execution",
           environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? "local",
@@ -52,9 +55,10 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
   );
 
   const filtered = records.filter((record) => {
-    const haystack = `${record.trace.id} ${record.useCase} ${record.trace.status}`.toLowerCase();
+    const displayStatus = effectiveTraceStatus(record.trace.status, record.events);
+    const haystack = `${record.trace.id} ${record.useCase} ${displayStatus}`.toLowerCase();
     return (
-      (status === "all" || record.trace.status === status) &&
+      (status === "all" || displayStatus === status) &&
       (useCase === "all" || record.useCaseId === useCase) &&
       haystack.includes(query.toLowerCase())
     );
@@ -117,7 +121,9 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
           <span>Trace ID</span>
           <span>Action</span>
         </div>
-        {filtered.map(({ trace, useCase, duration, environment }) => (
+        {filtered.map(({ trace, useCase, duration, environment, events }) => {
+          const displayStatus = effectiveTraceStatus(trace.status, events);
+          return (
           <div
             key={trace.id}
             className="grid grid-cols-[1.2fr_1fr_120px_120px_1fr_80px] gap-4 border-b border-white/5 px-4 py-4 text-sm text-slate-300 last:border-0"
@@ -127,14 +133,15 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
               {useCase}
               <span className="mt-1 block text-xs text-slate-500">{environment}</span>
             </span>
-            <StatusBadge status={trace.status === "error" ? "failed" : trace.status === "success" ? "success" : "running"} />
+            <StatusBadge status={displayStatus === "error" ? "failed" : displayStatus === "success" ? "success" : "running"} />
             <span>{duration} ms</span>
             <span className="font-mono text-xs text-cyan-200">{trace.id}</span>
             <button className="text-xs font-semibold text-red-200 hover:text-red-100" onClick={() => void deleteTrace(trace.id)}>
               Delete
             </button>
           </div>
-        ))}
+        );
+        })}
         {!filtered.length ? (
           <div className="p-6 text-sm text-slate-400">
             <p>No execution records match the current filters.</p>
@@ -148,6 +155,8 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
 
 function inferUseCaseId(events: TraceEvent[]) {
   const steps = new Set(events.map((event) => event.stepName));
+  if (steps.has("interoperability-findings")) return "UC-E6";
+  if (steps.has("identity-verification")) return "UC-E2";
   if (steps.has("fetchData")) return "UC-E5";
   if (steps.has("startTransfer") || steps.has("getTransfer") || steps.has("getEdrOrDataflow")) return "UC-E1";
   if (steps.has("getContractNegotiation") || steps.has("startContractNegotiation")) return "UC-E3";

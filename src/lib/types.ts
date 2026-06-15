@@ -5,11 +5,14 @@ export type MvdConfig = {
   consumerControlPlaneUrl: string;
   providerControlPlaneUrl: string;
   consumerDataPlaneUrl: string;
+  providerDataPlaneUrl: string;
   providerDspUrl: string;
   providerId: string;
   consumerIdentityHubUrl: string;
   providerIdentityHubUrl: string;
+  providerVaultUrl: string;
   issuerUrl: string;
+  traefikUrl: string;
   apiKeyHeader: string;
   apiKeyValue: string;
   mockMode: "auto" | "on" | "off";
@@ -17,6 +20,22 @@ export type MvdConfig = {
   clusterName: string;
   environment: string;
   otelEndpoint: string;
+};
+
+export type HealthState = "success" | "warning" | "offline";
+
+export type HealthCheckResult = {
+  ok: boolean;
+  state: HealthState;
+  status: number | null;
+  durationMs: number;
+  url: string;
+  checkedUrl: string;
+  service: string;
+  explanation: string;
+  detail: string;
+  dedicatedHealthEndpoint: boolean;
+  error?: string;
 };
 
 export type Trace = {

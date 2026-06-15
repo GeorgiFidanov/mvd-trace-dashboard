@@ -1,4 +1,4 @@
-import { createTrace, deleteTrace, deleteTracesByStatus, getTraceWithEvents, listTracesWithEvents, updateTrace } from "@/lib/storage";
+import { addTraceEvent, createTrace, deleteTrace, deleteTracesByStatus, getTraceWithEvents, listTracesWithEvents, updateTrace } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,7 +30,45 @@ export async function PATCH(request: Request) {
   if (body.status !== "running" && body.status !== "success" && body.status !== "error" && body.status !== "idle") {
     return Response.json({ error: "valid status is required" }, { status: 400 });
   }
-  return Response.json({ trace: updateTrace(body.id, { status: body.status }) });
+  let status = body.status;
+  if (status === "success") {
+    const trace = getTraceWithEvents(body.id);
+    if (trace?.events.some((event) => event.status === "error")) {
+      status = "error";
+    }
+  }
+  return Response.json({ trace: updateTrace(body.id, { status }) });
+}
+
+export async function PUT(request: Request) {
+  const body = await request.json();
+  if (typeof body.traceId !== "string") return Response.json({ error: "traceId is required" }, { status: 400 });
+  if (typeof body.stepName !== "string") return Response.json({ error: "stepName is required" }, { status: 400 });
+  if (body.status !== "success" && body.status !== "error" && body.status !== "pending") {
+    return Response.json({ error: "valid event status is required" }, { status: 400 });
+  }
+
+  const startedAt = typeof body.startedAt === "string" ? body.startedAt : new Date().toISOString();
+  const completedAt = typeof body.completedAt === "string" ? body.completedAt : new Date().toISOString();
+  const event = addTraceEvent({
+    traceId: body.traceId,
+    stepName: body.stepName,
+    actor: typeof body.actor === "string" ? body.actor : "Dashboard",
+    target: typeof body.target === "string" ? body.target : "Scenario Wizard",
+    method: typeof body.method === "string" ? body.method : "WIZARD",
+    url: typeof body.url === "string" ? body.url : "/scenario-wizard",
+    requestHeadersRedacted: {},
+    requestBody: body.requestBody ?? null,
+    responseStatus: typeof body.responseStatus === "number" ? body.responseStatus : null,
+    responseBody: body.responseBody ?? null,
+    extractedIds: {},
+    status: body.status,
+    errorMessage: typeof body.errorMessage === "string" ? body.errorMessage : null,
+    startedAt,
+    completedAt,
+    durationMs: Date.parse(completedAt) - Date.parse(startedAt),
+  });
+  return Response.json({ event });
 }
 
 export async function DELETE(request: Request) {

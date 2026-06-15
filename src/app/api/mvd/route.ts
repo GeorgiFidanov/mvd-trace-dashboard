@@ -1,6 +1,7 @@
 import {
   fetchData,
   getContractNegotiation,
+  getEdrDataAddress,
   getEdrOrDataflow,
   getTransfer,
   healthCheck,
@@ -12,6 +13,7 @@ import { getConfig } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+const routeReachableStatuses = [404];
 
 export async function POST(request: Request) {
   try {
@@ -21,9 +23,39 @@ export async function POST(request: Request) {
     switch (body.action) {
       case "health":
         return Response.json({
-          consumerControlPlane: await healthCheck(config.consumerControlPlaneUrl),
-          providerControlPlane: await healthCheck(config.providerControlPlaneUrl),
-          consumerDataPlane: await healthCheck(config.consumerDataPlaneUrl),
+          consumerControlPlane: await healthCheck(config.consumerControlPlaneUrl, { service: "Consumer Control Plane", warningStatuses: routeReachableStatuses }),
+          consumerDataPlane: await healthCheck(config.consumerDataPlaneUrl, { service: "Consumer Data Plane", warningStatuses: routeReachableStatuses }),
+          consumerIdentityHub: await healthCheck(config.consumerIdentityHubUrl, {
+            service: "Consumer IdentityHub",
+            path: "",
+            dedicatedHealthEndpoint: false,
+            warningStatuses: routeReachableStatuses,
+          }),
+          providerControlPlane: await healthCheck(config.providerControlPlaneUrl, { service: "Provider Control Plane", warningStatuses: routeReachableStatuses }),
+          providerDataPlane: await healthCheck(config.providerDataPlaneUrl, { service: "Provider Data Plane", warningStatuses: routeReachableStatuses }),
+          providerIdentityHub: await healthCheck(config.providerIdentityHubUrl, {
+            service: "Provider IdentityHub",
+            path: "",
+            dedicatedHealthEndpoint: false,
+            warningStatuses: routeReachableStatuses,
+          }),
+          providerVault: await healthCheck(config.providerVaultUrl, {
+            service: "Provider Vault",
+            path: "",
+            warningStatuses: routeReachableStatuses,
+          }),
+          issuer: await healthCheck(config.issuerUrl, {
+            service: "Issuer",
+            path: "",
+            dedicatedHealthEndpoint: false,
+            warningStatuses: routeReachableStatuses,
+          }),
+          traefik: await healthCheck(config.traefikUrl, {
+            service: "Traefik",
+            path: "",
+            dedicatedHealthEndpoint: false,
+            warningStatuses: routeReachableStatuses,
+          }),
         });
       case "requestCatalog":
         return Response.json(await requestCatalog(config, body.traceId, body.useCaseId));
@@ -67,6 +99,14 @@ export async function POST(request: Request) {
             traceId: body.traceId,
             useCaseId: body.useCaseId,
             transferProcessId: body.transferProcessId,
+          }),
+        );
+      case "getEdrDataAddress":
+        return Response.json(
+          await getEdrDataAddress(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            transferProcessId: required(body.transferProcessId, "transferProcessId"),
           }),
         );
       case "fetchData":

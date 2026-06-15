@@ -224,14 +224,15 @@ export function getTraceEvents(traceId: string) {
 
 export function getConfig(): MvdConfig {
   const row = getDb().prepare("SELECT value FROM settings WHERE key = ?").get("mvdConfig") as { value: string } | undefined;
-  return row ? { ...defaultConfig, ...JSON.parse(row.value) } : defaultConfig;
+  return normalizeConfig(row ? { ...defaultConfig, ...JSON.parse(row.value) } : defaultConfig);
 }
 
 export function saveConfig(config: MvdConfig) {
+  const normalized = normalizeConfig(config);
   getDb()
     .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
-    .run("mvdConfig", JSON.stringify(config));
-  return config;
+    .run("mvdConfig", JSON.stringify(normalized));
+  return normalized;
 }
 
 export function checkDatabase() {
@@ -282,4 +283,23 @@ function mapEvent(row: DbEvent): TraceEvent {
     responseBody: row.responseBody ? JSON.parse(row.responseBody) : null,
     extractedIds: JSON.parse(row.extractedIds),
   };
+}
+
+function normalizeConfig(config: MvdConfig): MvdConfig {
+  const oldAliases: Partial<Record<keyof MvdConfig, string>> = {
+    consumerControlPlaneUrl: "http://cp.consumer.localhost",
+    providerControlPlaneUrl: "http://cp.provider.localhost",
+    consumerDataPlaneUrl: "http://dp.consumer.localhost",
+    consumerIdentityHubUrl: "http://ih.consumer.localhost/cs",
+    providerIdentityHubUrl: "http://ih.provider.localhost/cs",
+    issuerUrl: "http://issuer.localhost/admin",
+  };
+
+  const normalized = { ...defaultConfig, ...config };
+  for (const [key, oldValue] of Object.entries(oldAliases) as [keyof MvdConfig, string][]) {
+    if (normalized[key] === oldValue) {
+      normalized[key] = defaultConfig[key] as never;
+    }
+  }
+  return normalized;
 }

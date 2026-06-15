@@ -5,7 +5,7 @@ type Status = UseCaseStatus | WizardStepStatus | "offline";
 const labels: Record<Status, string> = {
   ready: "Ready",
   running: "Running",
-  success: "Success",
+  success: "Done",
   warning: "Warning",
   failed: "Failed",
   pending: "Pending",

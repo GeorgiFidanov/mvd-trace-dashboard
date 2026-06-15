@@ -4,18 +4,28 @@ export const EDC_CONTEXT = "https://w3id.org/edc/connector/management/v2";
 export const DSP_PROTOCOL = "dataspace-protocol-http:2025-1";
 
 export const defaultConfig: MvdConfig = {
-  consumerControlPlaneUrl: process.env.MVD_CONSUMER_CP_URL ?? "http://cp.consumer.localhost",
-  providerControlPlaneUrl: process.env.MVD_PROVIDER_CP_URL ?? "http://cp.provider.localhost",
-  consumerDataPlaneUrl: process.env.MVD_CONSUMER_DP_URL ?? "http://dp.consumer.localhost",
+  consumerControlPlaneUrl:
+    process.env.MVD_CONSUMER_CP_URL ?? "http://controlplane.consumer.svc.cluster.local:8080",
+  providerControlPlaneUrl:
+    process.env.MVD_PROVIDER_CP_URL ?? "http://controlplane.provider.svc.cluster.local:8080",
+  consumerDataPlaneUrl:
+    process.env.MVD_CONSUMER_DP_URL ?? "http://dataplane.consumer.svc.cluster.local:8080",
+  providerDataPlaneUrl:
+    process.env.MVD_PROVIDER_DP_URL ?? "http://dataplane.provider.svc.cluster.local:8080",
   providerDspUrl:
     process.env.MVD_PROVIDER_DSP_URL ??
     "http://controlplane.provider.svc.cluster.local:8082/api/dsp/2025-1",
   providerId:
     process.env.MVD_PROVIDER_ID ??
     "did:web:identityhub.provider.svc.cluster.local%3A7083:provider",
-  consumerIdentityHubUrl: process.env.MVD_CONSUMER_IH_URL ?? "http://ih.consumer.localhost/cs",
-  providerIdentityHubUrl: process.env.MVD_PROVIDER_IH_URL ?? "http://ih.provider.localhost/cs",
-  issuerUrl: process.env.MVD_ISSUER_URL ?? "http://issuer.localhost/admin",
+  consumerIdentityHubUrl:
+    process.env.MVD_CONSUMER_IH_URL ?? "http://identityhub.consumer.svc.cluster.local:7083",
+  providerIdentityHubUrl:
+    process.env.MVD_PROVIDER_IH_URL ?? "http://identityhub.provider.svc.cluster.local:7083",
+  providerVaultUrl:
+    process.env.MVD_PROVIDER_VAULT_URL ?? "http://vault.provider.svc.cluster.local:8200/v1/sys/health",
+  issuerUrl: process.env.MVD_ISSUER_URL ?? "http://issuerservice.issuer.svc.cluster.local:8080/admin",
+  traefikUrl: process.env.MVD_TRAEFIK_URL ?? "http://traefik.traefik.svc.cluster.local:80",
   apiKeyHeader: process.env.MVD_API_KEY_HEADER ?? "X-Api-Key",
   apiKeyValue: process.env.MVD_API_KEY_VALUE ?? "password",
   mockMode:
@@ -40,7 +50,30 @@ export const mvdEndpoints = {
   getOpenDataflows: "/api/proxy/flows",
   getOpenDataflow: (id: string) => `/api/proxy/flows/${encodeURIComponent(id)}`,
   fetchData: (id: string) => `/api/proxy/flows/${encodeURIComponent(id)}/data`,
+  /** MVD 0.17+ stores EDR on consumer control-plane management API when proxy flow is not open yet. */
+  getEdrDataAddress: (id: string) => `/api/mgmt/v3/edrs/${encodeURIComponent(id)}/dataaddress`,
 };
+
+export function managementUrl(baseUrl: string) {
+  return servicePortUrl(baseUrl, "controlplane.", "8081");
+}
+
+export function dataPlaneProxyUrl(baseUrl: string) {
+  return servicePortUrl(baseUrl, "dataplane.", "11003");
+}
+
+function servicePortUrl(baseUrl: string, servicePrefix: string, port: string) {
+  try {
+    const url = new URL(baseUrl);
+    if (url.hostname.startsWith(servicePrefix) && url.hostname.endsWith(".svc.cluster.local") && url.port === "8080") {
+      url.port = port;
+      return url.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return baseUrl;
+  }
+  return baseUrl;
+}
 
 export const mvdProcessSteps = [
   "requestCatalog",
@@ -49,6 +82,7 @@ export const mvdProcessSteps = [
   "startTransfer",
   "getTransfer",
   "getEdrOrDataflow",
+  "getEdrDataAddress",
   "fetchData",
 ] as const;
 
@@ -137,6 +171,17 @@ export function extractCatalogSelection(catalog: unknown, preferredAssetId = "as
   };
 }
 
+export function readTransferState(body: unknown): string | undefined {
+  if (typeof body === "string" && body.length > 0) return body;
+  const record = asRecord(body);
+  if (!record) return undefined;
+  return stringOrUndefined(record.state);
+}
+
+export function isTransferReadyState(state?: string) {
+  return state === "STARTED" || state === "COMPLETED" || state === "COMPLETING";
+}
+
 export function extractIds(stepName: string, body: unknown) {
   const record = asRecord(body);
   const ids: Record<string, string> = {};
@@ -147,10 +192,12 @@ export function extractIds(stepName: string, body: unknown) {
     if (selection.contractOfferId) ids.contractOfferId = selection.contractOfferId;
   }
 
+  const transferState = stepName.includes("Transfer") ? readTransferState(body) : undefined;
+  if (transferState) ids.state = transferState;
+
   const directMap: Record<string, string> = {
     "@id": stepName.includes("Transfer") ? "transferProcessId" : "contractNegotiationId",
     contractAgreementId: "contractAgreementId",
-    state: "state",
     endpoint: "endpoint",
   };
 

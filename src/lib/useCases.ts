@@ -161,7 +161,8 @@ export const wizardSteps: WizardStepDefinition[] = [
     role: "data",
     useCaseIds: ["UC-E1", "UC-E5"],
     action: "fetchData",
-    explanation: "Retrieve the final data through the consumer data-plane proxy.",
+    explanation:
+      "Retrieve the final data through the consumer data-plane proxy. HTTP 204 from the dataflow endpoint means the transfer exists but the proxy flow is not open yet — the dashboard waits and retries automatically.",
     successCriteria: "The consumer receives the protected data payload.",
     outcomeSummary: "The consumer successfully received the provider data.",
   },

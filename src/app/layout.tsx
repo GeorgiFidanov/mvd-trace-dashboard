@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Dataspace Use-Case Validation Platform",
-  description: "Educational Eclipse EDC scenario validation dashboard",
+  description: "Educational EDC MVD and FIWARE scenario validation dashboard by Pink Panther",
 };
 
 export default function RootLayout({

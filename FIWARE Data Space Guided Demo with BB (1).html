@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FIWARE Data Space Guided Demo & Audit Tool</title>
+<style>
+:root{--bg:#f6f7fb;--panel:#fff;--ink:#071426;--muted:#667085;--line:#d7deea;--blue:#006f8f;--green:#10b981;--red:#c91923;--amber:#f59e0b;--black:#050505;--soft:#eef7ff;--term:#0b1220;--termText:#dff8ff;
+--accent:#4f8ef7; --accent2:#7ecfb3; --accent3:#f0a060; --accent4:#c97cf5; --tag-bg:#1e2540;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+nav{height:66px;position:sticky;top:0;z-index:20;background:rgba(246,247,251,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 32px}
+.brand{display:flex;gap:14px;align-items:center}.logo{width:36px;height:36px;border-radius:10px;background:#000;color:#fff;display:grid;place-items:center;font-weight:950}
+.brand h1{font-size:16px;margin:0}.brand p{font-size:11px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:850;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+main{max-width:1400px;margin:0 auto;padding:28px}
+.hero{border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,#fff 0%,#f3f9ff 68%,#dbf7ff 100%);padding:34px;box-shadow:0 18px 50px rgba(15,23,42,.06);display:grid;grid-template-columns:1.6fr .9fr;gap:22px}
+.hero h2{font-size:38px;line-height:1.05;margin:0 0 12px}.hero p{color:var(--muted);font-size:15px;line-height:1.55;margin:0}
+.heroPanel{background:#071426;color:#fff;border-radius:18px;padding:22px}.heroPanel h3{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#a7f3d0}
+.lane{display:flex;align-items:center;gap:10px;margin-top:10px;color:#dceaff;font-size:13px}.lane b{color:#fff}
+.btnrow{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}
+.btn{border:0;border-radius:11px;padding:11px 16px;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.055em;cursor:pointer}
+.primary{background:#000;color:#fff}.secondary{background:#fff;color:#000;border:1px solid var(--line)}.danger{background:var(--red);color:#fff}.ghost{background:#f7f9ff;border:1px solid var(--line);color:var(--ink)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.checks{margin:18px 0;display:flex;gap:8px;flex-wrap:wrap}.check{border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;color:var(--muted);background:#fff}
+.check.good{color:var(--green);border-color:rgba(16,185,129,.35)}.check.bad{color:var(--red);border-color:rgba(186,26,26,.35)}
+.flow{margin-top:24px;display:grid;gap:16px}
+.step{position:relative;background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;display:grid;grid-template-columns:54px 1fr auto;gap:18px;align-items:center;box-shadow:0 10px 30px rgba(15,23,42,.04)}
+.num{width:44px;height:44px;border-radius:14px;background:#111;color:#fff;display:grid;place-items:center;font-weight:950}
+.step h3{margin:0 0 6px;font-size:18px}.step p{margin:0;color:var(--muted);line-height:1.45}
+.actors{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.actor{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;border-radius:999px;padding:6px 9px}
+.consumer{background:#e0f2fe;color:#075985}.provider{background:#dcfce7;color:#166534}.governance{background:#fef3c7;color:#92400e}.verifier{background:#f3e8ff;color:#6b21a8}
+.step.done{border-color:rgba(16,185,129,.45)}.step.running{border-color:rgba(245,158,11,.55)}.step.failed{border-color:rgba(201,25,35,.55)}
+.statuslabel{font-size:11px;font-weight:900;text-transform:uppercase;color:var(--muted)}
+.modalBack{position:fixed;inset:0;background:rgba(2,8,23,.55);z-index:50;display:none;align-items:center;justify-content:center;padding:22px}.modalBack.show{display:flex}
+.modal{width:min(1060px,96vw);max-height:92vh;overflow:hidden;background:#fff;border-radius:22px;box-shadow:0 30px 100px rgba(0,0,0,.32);display:grid;grid-template-rows:auto 1fr auto}
+.modalHeader{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:18px}.modalHeader h3{margin:0 0 6px;font-size:21px}.modalHeader p{margin:0;color:var(--muted);line-height:1.45}
+.close{border:1px solid var(--line);background:#fff;border-radius:10px;width:38px;height:38px;font-weight:900;cursor:pointer}
+.modalBody{padding:22px;overflow:auto}.modalActions{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:12px;justify-content:flex-end;background:#fbfcff}
+.focusHero{border:1px solid #dbeafe;background:#eff6ff;border-radius:15px;padding:14px;margin-bottom:16px}.focusHero h4{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#075985}.focusHero p{margin:0;color:#475569;line-height:1.5}
+
+/* Advanced Embedded DSSC Mapping Layout Style */
+.mapping-panel { margin-top: 14px; padding: 16px; background: #11141c; border: 1px solid #23293a; border-radius: 12px; color: #dde4f0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+.mapping-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mapping-panel th { text-align: left; padding: 8px; font-size: 10px; text-transform: uppercase; color: #7a86a0; border-bottom: 2px solid #23293a; letter-spacing: 0.5px; }
+.mapping-panel td { padding: 12px 8px; border-bottom: 1px solid #1f2433; vertical-align: top; line-height: 1.5; }
+.dim-block { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #23293a; }
+.dim-block:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.dim-label { font-size: 9.5px; text-transform: uppercase; font-weight: 800; color: #52607a; letter-spacing: 0.8px; margin-bottom: 4px; display: block; }
+.mapping-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.mapping-tag { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600; text-decoration: none; color: #fff; transition: opacity 0.15s; }
+.mapping-tag:hover { opacity: 0.85; }
+.mapping-tag-bb { background: #1a2a4a; color: #6aadff; border: 1px solid #2a4070; }
+.mapping-tag-proto { background: #1a3530; color: #6edfc0; border: 1px solid #2a5548; }
+.mapping-tag-svc { background: #2a1e3a; color: #c090f0; border: 1px solid #4a3060; }
+.mapping-tag-ext { background: #2a1e10; color: #e8a860; border: 1px solid #5a3a10; }
+.audit-text { font-size: 11.5px; color: #a1afc9; font-style: normal; }
+.audit-highlight { color: #7ecfb3; font-weight: 600; }
+.mainSubstepHost { grid-column: 2/4; margin-top: 4px; }
+.mainSubsteps { border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; margin-top: 14px; overflow: hidden; }
+.mainSubsteps summary { cursor: pointer; list-style: none; padding: 12px 14px; font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: .055em; color: #334155; display: flex; align-items: center; justify-content: space-between; }
+.mainSubsteps summary::-webkit-details-marker { display: none; }
+.mainSubsteps summary:after { content: '▾'; color: #64748b; }
+.mainSubsteps[open] summary:after { content: '▴' }
+.mainMiniList { display: grid; gap: 12px; padding: 0 12px 12px; }
+.mainMini { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
+.mainMiniNum { width: 28px; height: 28px; border-radius: 9px; background: #eef7ff; color: #075985; display: grid; place-items: center; font-weight: 950; font-size: 12px; }
+.mainMini strong { display: block; font-size: 13px; }
+.mainMini span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.mainMiniWrap { display: flex; flex-direction: column; gap: 2px; }
+.mainMiniActions { display: flex; align-items: center; gap: 10px; }
+.miniStatus { font-size: 11px; font-weight: 850; color: #94a3b8; white-space: nowrap; text-transform: uppercase; letter-spacing: .03em; }
+.miniStatus.done { color: #15803d; }
+.miniStatus.failed { color: #b91c1c; }
+.miniStatus.running { color: #075985; }
+</style>
+</head>
+<body>
+<nav><div class="brand"><div class="logo">DS</div><div><h1>FIWARE Data Space Guided Demo</h1><p>DS4SSCC Core Demo · Business Flow & Audit Tool</p></div></div><div class="pill"><span class="dot"></span><span id="onlineText">System Ready</span></div></nav>
+<main>
+<section class="hero"><div><h2>One guided flow for trusted data sharing.</h2><p>This dashboard presents the FIWARE Data Space Connector mapped directly to the Data Spaces Support Centre (DSSC) Blueprint v3.0, functioning as both a scenario execution engine and a baseline architectural compliance audit tool.</p><div class="btnrow"><button class="btn secondary" id="refreshStatus">Refresh Status</button><button class="btn danger" data-mini-open="reset_demo">Reset demo</button></div></div><div class="heroPanel"><h3>Presentation & Audit Angle</h3><div class="lane"><b>Consumer POV:</b> Proves verifiable identity and triggers authorized data transaction syncs.</div><div class="lane"><b>Provider POV:</b> Structures protected assets, defines ODRL policies, and registers marketplace offers.</div><div class="lane"><b>Governance POV:</b> Sets trust anchors via TIR cross-verification and validates structural schema compliance.</div></div></section>
+<div class="checks" id="checks"><span class="check good">✓ Ready for demo</span></div>
+<section class="flow" id="flow">
+
+<div class="step ready" id="step-setup_participants"><div class="num">1</div><div><h3>Onboard Participant</h3><p>Work through participant onboarding in smaller visible actions: DID, users, mapping, and credentials.</p><div class="actors"><span class="actor consumer">Consumer POV</span><span class="actor governance">Governance / Trust</span></div></div><div class="actions"><div class="statuslabel" data-status="setup_participants">Ready to run</div></div><div class="mainSubstepHost" data-main-substeps="setup_participants"><details class="mainSubsteps" open=""><summary>Mini executable steps</summary><div class="mainMiniList">
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">1A</div><div><strong>Configure organisation DIDs</strong><span>Establish cryptographic identity bounds for participants.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_onboard_dids">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_onboard_dids">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=trust-framework" target="_blank">Trust Framework</a><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">Identity &amp; Attestation Mgmt</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://www.w3.org/TR/did-core/" target="_blank">W3C DID Core</a><span class="mapping-tag mapping-tag-ext">did:key / did:web</span></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=participant-agent-services" target="_blank">Participant Agent Services</a><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=federation-services" target="_blank">Federation Services</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Converts local software setups into verifiable cryptographic entities. DIDs act as the root anchor of trust for cross-boundary interaction.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Verify that every participant resolves via a standardized DID method (<span class="mono">did:key</span> / <span class="mono">did:web</span>). DIDs must be registered within a central <span class="mono">Trusted Issuers Registry (TIR)</span> or distributed Trust Anchor to guarantee ecosystem compliance.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">1B</div><div><strong>View users by role</strong><span>Audit identity registry partitions and organizational role mapping.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_onboard_users">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_onboard_users">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">Identity &amp; Attestation Mgmt</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">OpenID Connect 1.0</a><a class="mapping-tag mapping-tag-ext" href="https://datatracker.ietf.org/doc/html/rfc6749" target="_blank">OAuth 2.0</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=identity-provisioning" target="_blank">Identity Provisioning Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Links human or software agent personas to machine-readable attributes within an Identity Provider (Keycloak), laying the groundwork for verifiable attribute assertions.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Roles must be mapped explicitly into a verifiable token payload structure. Cross-check if token formats support structured claims required for attribute-based usage control.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">1C</div><div><strong>Create / map a user</strong><span>Provision new attributes into the active identity structure.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_onboard_create_user">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_onboard_create_user">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">Identity &amp; Attestation Mgmt</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><span class="mapping-tag mapping-tag-ext">Keycloak Admin API</span></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=identity-provisioning" target="_blank">Identity Provisioning Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Executes life-cycle management operations on corporate attributes and identities.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Ensure provisioning channels utilize automated protocols with audit logs. Manual mapping bypasses trust validation; programmatic binding to DIDs is required for secure auditable environments.
+    </div></td></tr></tbody></table></div>
+  </div>
+</div></details></div></div>
+
+<div class="step ready" id="step-publish_product"><div class="num">2</div><div><h3>Create / Publish Data Product</h3><p>Build or upload an asset first, then create it in the provider, apply policy, and publish the offer.</p><div class="actors"><span class="actor provider">Provider POV</span><span class="actor governance">Usage Control</span></div></div><div class="actions"><div class="statuslabel" data-status="publish_product">Ready to run</div></div><div class="mainSubstepHost" data-main-substeps="publish_product"><details class="mainSubsteps"><summary>Mini executable steps</summary><div class="mainMiniList">
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">2A</div><div><strong>Build or upload asset</strong><span>Construct a semantic description of a new metadata asset.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_publish_build_asset">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_publish_build_asset">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=data-services-and-offerings-descriptions" target="_blank">Data &amp; Service Descriptions</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-ext" href="https://www.w3.org/TR/json-ld11/" target="_blank">JSON-LD 1.1</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=marketplace" target="_blank">Marketplace / Catalogue Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Generates the metadata body that details the structural schema and parameters of the underlying dataset, ensuring semantic understanding across participants.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Data descriptions must conform to shared linked-data ontologies via standard schemas. Validate that <span class="mono">@context</span> references map cleanly to verifiable vocabularies.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">2B</div><div><strong>Create protected asset</strong><span>Instantiate the dataset within the functional data plane broker.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_publish_create_asset">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_publish_create_asset">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=data-exchange" target="_blank">Data Exchange</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://blueprint.dssc.eu/?pane=technical&technical=data-exchange" target="_blank">NGSI-LD (ETSI CIM 009)</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=data-exchange" target="_blank">Data Exchange Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Deploys the physical context data entity into the Scorpio Broker data plane under full lock, establishing a target for policy assignment.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> The data persistence layer must remain entirely unreachable via external public channels unless processed through a Policy Enforcement Point proxy. Audit system routes to ensure zero direct broker visibility.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">2C</div><div><strong>Publish product offer</strong><span>Expose the asset alongside clear usage rules to the catalogue.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_publish_offers">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_publish_offers">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=publication-and-discovery" target="_blank">Publication &amp; Discovery</a><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=data-services-and-offerings-descriptions" target="_blank">Descriptions</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://blueprint.dssc.eu/?pane=technical&technical=data-services-and-offerings-descriptions" target="_blank">W3C DCAT</a><a class="mapping-tag mapping-tag-ext" href="https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620" target="_blank">TMF620 v4</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=marketplace" target="_blank">Marketplace Service</a><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=value-creation" target="_blank">Value Creation Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Packages the semantic metadata together with explicit ODRL contract policies and binds them into a public cataloging registry via standardized APIs.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Every public offering record must declare an unambiguous pairing of the data asset identifier and its usage restriction criteria. Verify catalog payloads against data lifecycle compliance standards.
+    </div></td></tr></tbody></table></div>
+  </div>
+</div></details></div></div>
+
+<div class="step ready" id="step-request_access"><div class="num">3</div><div><h3>Request Data Access</h3><p>Select the data product being requested, then submit the access/agreement flow.</p><div class="actors"><span class="actor consumer">Consumer POV</span><span class="actor provider">Provider POV</span><span class="actor governance">Agreement</span></div></div><div class="actions"><div class="statuslabel" data-status="request_access">Ready to run</div></div><div class="mainSubstepHost" data-main-substeps="request_access"><details class="mainSubsteps"><summary>Mini executable steps</summary><div class="mainMiniList">
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">3A</div><div><strong>Select requested data</strong><span>Discover available options inside the active marketplace catalog.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_request_select">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_request_select">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=publication-and-discovery" target="_blank">Publication &amp; Discovery</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-ext" href="https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620" target="_blank">TMForum TMF620 v4</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=marketplace" target="_blank">Marketplace / Catalogue Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Allows a consumer to browse and select a structured data offering from the provider's active catalog repository.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Catalogue discovery endpoints must restrict viewable metadata fields to authenticated participants if the ecosystem structure classifies discovery as protected information. Validate search query access parameters.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">3B</div><div><strong>Submit request/agreement</strong><span>Formally bind participants to a digital usage transaction contract.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_request_agreement">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_request_agreement">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=access-usage-policies-enforcement" target="_blank">Access &amp; Usage Policies Enforcement</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-ext" href="https://www.tmforum.org/oda/open-apis/directory/product-ordering-management-api-TMF622" target="_blank">TMForum TMF622 v4</a><a class="mapping-tag mapping-tag-ext" href="https://www.w3.org/TR/odrl-model/" target="_blank">ODRL 2.2</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=marketplace" target="_blank">Marketplace Service</a><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=contract-management" target="_blank">Contract Management Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Converts a marketplace purchase request into a machine-readable ODRL contract, which is instantly parsed to configure the provider's Policy Administration Point (PAP).<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> The generated policy must include immutable references to the asset ID, the target consumer's DID, and explicit constraints. Audit the contract manager's configuration pipeline to verify zero policy parameter drifting.
+    </div></td></tr></tbody></table></div>
+  </div>
+</div></details></div></div>
+
+<div class="step ready" id="step-use_product"><div class="num">4</div><div><h3>Access &amp; Use Data</h3><p>First prove identity and token issuance, then render the selected data product in the viewer.</p><div class="actors"><span class="actor consumer">Consumer POV</span><span class="actor verifier">Verifier POV</span><span class="actor provider">Provider Data</span></div></div><div class="actions"><div class="statuslabel" data-status="use_product">Ready to run</div></div><div class="mainSubstepHost" data-main-substeps="use_product"><details class="mainSubsteps"><summary>Mini executable steps</summary><div class="mainMiniList">
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">4A</div><div><strong>Prove identity and get token</strong><span>Validate verifiable credentials to request temporary data access tokens.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_use_token">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_use_token">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">Identity &amp; Attestation Mgmt</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://blueprint.dssc.eu/?pane=technical&technical=identity-attestation-management" target="_blank">OID4VP</a><a class="mapping-tag mapping-tag-ext" href="https://datatracker.ietf.org/doc/html/rfc8693" target="_blank">OAuth Token Exchange</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=credential-verification" target="_blank">Credential Verification Service</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> Validates Verifiable Presentations (VPs) against the active trust anchor. If valid, the component exchanges the presentation for a short-lived data-plane bearer token.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> The verification service must explicitly confirm signature validity, token expiration, and holder identity matching. Ensure the token exchange system records complete audit trails of all identity verification checks.
+    </div></td></tr></tbody></table></div>
+  </div>
+  
+  <div class="mainMiniWrap"><div class="mainMini"><div class="mainMiniNum">4B</div><div><strong>Render selected data</strong><span>Execute the final authorized end-to-end data transfer.</span></div><div class="mainMiniActions"><span class="miniStatus " data-mini-status="mini_use_viewer">Not run</span><button type="button" class="btn secondary" data-mini-open="mini_use_viewer">Run</button></div></div>
+    <div class="mapping-panel"><table><thead><tr><th style="width: 45%;">DSSC Dimensions</th><th>Architectural Alignment &amp; Audit Criteria</th></tr></thead><tbody><tr><td>
+      <div class="dim-block"><span class="dim-label">Building Block</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=data-exchange" target="_blank">Data Exchange</a><a class="mapping-tag mapping-tag-bb" href="https://blueprint.dssc.eu/?pane=technical&technical=access-usage-policies-enforcement" target="_blank">Policies Enforcement</a></div></div>
+      <div class="dim-block"><span class="dim-label">Protocol / Standard</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-proto" href="https://blueprint.dssc.eu/?pane=technical&technical=data-exchange" target="_blank">NGSI-LD (ETSI CIM 009)</a><a class="mapping-tag mapping-tag-ext" href="https://datatracker.ietf.org/doc/html/rfc6750" target="_blank">OAuth 2.0 Bearer</a></div></div>
+      <div class="dim-block"><span class="dim-label">Service Definition</span><div class="mapping-tags"><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=data-exchange" target="_blank">Data Exchange Service</a><a class="mapping-tag mapping-tag-svc" href="https://blueprint.dssc.eu/?pane=service-definitions&service=policy-enforcement" target="_blank">Policy Enforcement Service (PEP)</a></div></div>
+    </td><td><div class="audit-text">
+      <span class="audit-highlight">Functional Link:</span> The Policy Enforcement Point (PEP) evaluates the bearer token payload, validates it against active PDP data rules, and transfers the context data stream safely to the consumer layer.<br>
+      <span class="audit-highlight">Audit Compliance Rule:</span> Data transactions must execute over encrypted channels, passing through automated PEP proxies that log request contexts. Verify that any invalid or expired tokens trigger an immediate transaction block.
+    </div></td></tr></tbody></table></div>
+  </div>
+</div></details></div></div>
+
+<div class="step" id="step-revoke_access"><div class="num">5</div><div><h3>Offboard / Revoke Access</h3><p>Remove trust first, then verify that access is denied.</p><div class="actors"><span class="actor governance">Governance POV</span><span class="actor provider">Provider Control</span></div></div><div class="actions"><div class="statuslabel infoOnly">Reference only</div></div><div class="mainSubstepHost" data-main-substeps="revoke_access"></div></div>
+</section>
+</main>
+
+<div class="modalBack" id="modalBack"><div class="modal"><div class="modalHeader"><div><h3 id="modalTitle">Reset demo state</h3><p id="modalDesc">Delete the dashboard-created entities and read policies, and clear tracking, so the demo can be re-run cleanly.</p><div class="actors" id="modalActors"><span class="actor provider">Provider POV</span><span class="actor governance">Governance / Trust</span></div><div class="modalHint">This window only closes when you press Close or ×. Clicking outside will not close it.</div></div><button class="close" id="closeModal">×</button></div><div class="modalBody"><div id="modalBody"></div><div class="resultPanel" id="resultPanel"></div><button class="btn ghost evidenceToggle" id="toggleLog" style="display: none;">Show technical log</button><pre class="terminal mono" id="terminal"></pre></div><div class="modalActions" id="modalActions"><button type="button" class="btn secondary" id="closeAction">Close</button><button type="button" class="btn primary" id="startStep">Start Step</button></div></div></div>
+
+<script>
+const qs=s=>document.querySelector(s); const qsa=s=>Array.from(document.querySelectorAll(s)); const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+let config={},roles=[],products=[],customAssets=[],visibleUsers=[],miniStatus={},annotations={},editMode=false,editKey='',currentAction=null,activeJob=null,pollTimer=null,lastOutput='';
+
+const copy={
+ setup_participants:{title:'Step 1 · Onboard Participant',desc:'Consumer and governance view: define participants, DIDs, predefined roles, and issue verifiable credentials.',actors:['Consumer POV','Governance / Trust'], nextAction: 'publish_product'},
+ publish_product:{title:'Step 2 · Create / Publish Data Product',desc:'Provider view: create a protected EnergyReport asset, define usage policy, publish product specifications and offers.',actors:['Provider POV','Usage Control'], nextAction: 'request_access'},
+ request_access:{title:'Step 3 · Request Data Access',desc:'Consumer representative view: request access to the provider offer and complete the agreement/order flow.',actors:['Consumer POV','Provider Approval','Agreement'], nextAction: 'use_product'},
+ use_product:{title:'Step 4 · Access & Use Data',desc:'Consumer and verifier view: prove access, receive a token, and render the protected NGSI-LD data as a business output.',actors:['Consumer POV','Verifier POV','Provider Data'], nextAction: 'revoke_access'},
+ revoke_access:{title:'Step 5 · Offboard / Revoke Access',desc:'Governance and provider view: remove trust for the consumer and prove the access attempt fails.',actors:['Governance POV','Provider Control'], nextAction: null},
+ reset_demo:{title:'Reset demo state',desc:'Delete the dashboard-created entities and read policies, and clear tracking, so the demo can be re-run cleanly.',actors:['Provider POV','Governance / Trust'], nextAction: null}
+};
+
+function actorHtml(list){return list.map(a=>`<span class="actor ${a.toLowerCase().includes('provider')?'provider':a.toLowerCase().includes('governance')||a.toLowerCase().includes('agreement')?'governance':a.toLowerCase().includes('verifier')?'verifier':'consumer'}">${esc(a)}</span>`).join('')}
+function statusSet(a,state){const el=qs('#step-'+a); if(el){el.classList.remove('done','running','failed','ready','checking'); if(state)el.classList.add(state);} const sl=qs(`[data-status="${a}"]`); if(sl)sl.textContent=state==='done'?'✓ Completed':state==='running'?'⏳ Running':state==='failed'?'✕ Failed':state==='ready'?'Ready to run':state==='checking'?'Checking…':'Not run'; const mp=qs(`[data-mini-status="${a}"]`); if(mp){miniStatus[a]=state; mp.className='miniStatus '+(state||''); mp.textContent=state==='done'?'✓ Done':state==='running'?'⏳ Running':state==='failed'?'✕ Failed':'Not run';}}
+function setAllStepStatus(state){['setup_participants','publish_product','request_access','use_product'].forEach(a=>statusSet(a,state))}
+function restoreStatuses(){setAllStepStatus('ready')}
+
+function openModal(action,load=true){
+ if(!copy[action]){alert('Unknown dashboard action: '+action); return;}
+ currentAction=action;
+ const c=copy[action];
+ qs('#modalTitle').textContent=c.title;
+ qs('#modalDesc').textContent=c.desc;
+ qs('#modalActors').innerHTML=actorHtml(c.actors||[]);
+ qs('#modalBody').innerHTML=`<div class="focusHero"><h4>Overview & Compliance Scope</h4><p>${esc(c.desc)}</p></div>`;
+ qs('#resultPanel').classList.remove('show');
+ qs('#terminal').classList.remove('show');
+ qs('#terminal').textContent='';
+ qs('#toggleLog').style.display='none';
+ qs('#modalActions').innerHTML=`<button type="button" class="btn secondary" id="closeAction">Close</button><button type="button" class="btn primary" id="startStep">Start Step</button>`;
+ qs('#modalBack').add ? qs('#modalBack').classList.add('show') : qs('#modalBack').className += ' show';
+ qs('#closeAction').onclick=closeModal;
+ qs('#startStep').onclick=async()=>{
+   const startBtn=qs('#startStep');
+   if(startBtn.textContent === 'Next Step') {
+     closeModal();
+     if(c.nextAction) openModal(c.nextAction);
+     return;
+   }
+   startBtn.disabled=true;
+   startBtn.textContent='Starting...';
+   try{
+     await runAction(action);
+   }catch(e){
+     renderResult(action, String(e.message||e), false);
+     statusSet(action,'failed');
+     activeJob=null;
+     startBtn.disabled=false;
+     startBtn.textContent = 'Start Step';
+   }
+ };
+}
+
+function closeModal(){qs('#modalBack').classList.remove('show')}
+function terminalText(t){qs('#terminal').textContent=t; qs('#terminal').scrollTop=qs('#terminal').scrollHeight}
+
+function renderResult(action,out,ok){
+ let html=`<div class="completion ${ok?'':'failed'}">${ok?'✓ Step completed successfully':'✕ Step failed — check the technical log'}</div>`;
+ html+=`<h4>Audit Verification Result</h4><p>${ok?'The system operations validated cleanly against the assigned technical building block rules. Architectural criteria pass.':'Validation failure encountered. The configuration payload deviates from the compliance rule guidelines.'}</p>`;
+ qs('#resultPanel').innerHTML=html; qs('#resultPanel').classList.add('show'); qs('#toggleLog').style.display='inline-flex';
+ 
+ const startBtn = qs('#startStep');
+ if(ok && copy[action] && copy[action].nextAction) {
+   startBtn.textContent = 'Next Step';
+   startBtn.disabled = false;
+   startBtn.className = 'btn primary';
+ } else if (startBtn) {
+   startBtn.textContent = 'Start Step';
+   startBtn.disabled = false;
+ }
+ 
+ qs('#toggleLog').onclick=()=>{qs('#terminal').classList.toggle('show'); qs('#toggleLog').textContent=qs('#terminal').classList.contains('show')?'Hide technical log':'Show technical log'}
+}
+
+async function runAction(action){
+ if(activeJob){ return; }
+ statusSet(action,'running');
+ try{
+   const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
+   let d=await r.json();
+   if(!r.ok){renderResult(action,d.error||('HTTP '+r.status),false); statusSet(action,'failed'); return;}
+   activeJob={id:d.job_id,action};
+   if(pollTimer)clearInterval(pollTimer);
+   pollTimer=setInterval(pollJob,900);
+ }catch(e){
+   renderResult(action,String(e.message||e),false);
+   statusSet(action,'failed');
+   activeJob=null;
+ }
+}
+
+async function pollJob(){
+ if(!activeJob)return;
+ try{
+   const r=await fetch('/api/job?id='+encodeURIComponent(activeJob.id),{cache:'no-store'});
+   const j=await r.json();
+   terminalText(j.output||'');
+   if(j.status!=='running' && j.status!=='queued'){
+     clearInterval(pollTimer);
+     const ok=j.returncode===0;
+     renderResult(activeJob.action,j.output||'',ok);
+     statusSet(activeJob.action,ok?'done':'failed');
+     activeJob=null;
+   }
+ }catch(e) {
+   clearInterval(pollTimer);
+   statusSet(activeJob.action,'failed');
+   activeJob=null;
+ }
+}
+
+document.addEventListener('click', (e)=>{
+  const main=e.target.closest('[data-open]'); if(main){e.preventDefault(); openModal(main.dataset.open); return;}
+  const mini=e.target.closest('[data-mini-open]'); if(mini){e.preventDefault(); openModal(mini.dataset.miniOpen); return;}
+});
+qs('#closeModal').onclick=closeModal;
+qs('#modalBack').onclick=e=>{ if(e.target.id==='modalBack'){ e.preventDefault(); } };
+const refreshBtn=qs('#refreshStatus');
+if(refreshBtn)refreshBtn.onclick=()=>restoreStatuses();
+restoreStatuses();
+</script>
+</body>
+</html>

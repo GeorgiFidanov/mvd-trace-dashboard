@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import Link from "next/link";
 
 const components = [
   ["Dashboard", "Guided UI for scenario execution and education."],
@@ -11,6 +12,28 @@ const components = [
   ["Vault", "Stores connector secrets such as STS client secrets and API credentials."],
   ["PostgreSQL", "Persistence for EDC runtime state in Kubernetes deployments."],
   ["Traefik", "Ingress and local routing layer for participant services."],
+];
+
+const docs = [
+  ["What is a Dataspace FIWARE & EDC.pdf", "Business-friendly dataspace primer for FIWARE and EDC."],
+  ["Reading_Guide_Dataspaces_Project.pdf", "Suggested order for reading the project evidence."],
+  ["Dataspace Use-Case Validation Platform.pdf", "Presentation document for the validation dashboard itself."],
+  ["DataSpace_FIWARE_to_EDC_final.pptx.pdf", "Slide deck covering the FIWARE to EDC MVD direction."],
+  ["Technical Documentation Fiware.pdf", "Technical FIWARE notes and reference material."],
+  ["fiware-dataspace.pdf", "FIWARE dataspace background material."],
+  ["Minimum Viable Dataspace (MVD) Technical Analysis.pdf", "Technical analysis of the Eclipse MVD setup."],
+  ["Deployment and Testing Report_ Eclipse MVD.pdf", "Deployment and testing notes for the running environment."],
+  ["Eclipse Dataspace Selection & Gaia-X Alignment.pdf", "Why EDC was selected and how it relates to Gaia-X."],
+  ["Dataspace_Project_Plan.docx.pdf", "Project plan exported as PDF."],
+  ["Dataspace_Whats_Next.docx.pdf", "Next-step planning notes exported as PDF."],
+  ["Project_Debriefing_Dataspace_Implementation.docx.pdf", "Project debriefing and implementation reflection."],
+  ["Update the use cases then to what they should be b....pdf.pdf", "Use-case update notes."],
+  ["Group Retrospectives.pdf", "Project group reflection material."],
+];
+
+const markdownGuides = [
+  ["how-this-codebase-runs.md", "How this codebase runs", "Beginner-friendly guide to the TypeScript and Next.js dashboard internals."],
+  ["validation-platform-redesign.md", "Validation platform redesign", "Architecture and redesign plan for the validation platform."],
 ];
 
 export default function ArchitecturePage() {
@@ -55,6 +78,48 @@ export default function ArchitecturePage() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-pink-300/20 bg-pink-300/10 p-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-pink-200">Project Documentation</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Read the supporting documents inside the dashboard</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+                These documents are part of the Pink Panther project evidence. Open them here when you need the why,
+                architecture context, deployment notes, or group reflection behind the dashboard.
+              </p>
+            </div>
+          </div>
+          <h3 className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">Markdown guides</h3>
+          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+            {markdownGuides.map(([file, title, description]) => (
+              <Link
+                key={file}
+                href={`/docs/${encodeURIComponent(file)}`}
+                className="rounded-3xl border border-white/10 bg-slate-950/60 p-5 transition hover:-translate-y-1 hover:border-cyan-300/40 hover:bg-white/10"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Markdown</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+              </Link>
+            ))}
+          </div>
+          <h3 className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-pink-200">PDF evidence</h3>
+          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+            {docs.map(([file, description]) => (
+              <Link
+                key={file}
+                href={`/api/docs/${encodeURIComponent(file)}`}
+                target="_blank"
+                className="rounded-3xl border border-white/10 bg-slate-950/60 p-5 transition hover:-translate-y-1 hover:border-pink-300/40 hover:bg-white/10"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-pink-200">PDF</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{file.replace(".pdf", "")}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+              </Link>
+            ))}
           </div>
         </section>
 

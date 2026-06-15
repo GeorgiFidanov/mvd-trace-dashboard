@@ -1,76 +1,84 @@
 # Dataspace Use-Case Validation Platform
 
-Educational demonstrator dashboard for validating dataspace use cases across FIWARE and Eclipse EDC tracks. It guides
-identity, discovery, policy, negotiation, transfer, and data retrieval scenarios while preserving technical traces for
-deeper review.
+Educational Next.js dashboard for explaining and validating dataspace scenarios across two tracks:
 
-## Why This Exists
+- FIWARE Data Space: preparation and audit presentation track.
+- Eclipse Dataspace Components (EDC): available runnable track for the Minimum Viable Dataspace (MVD) demo.
 
-The MVD demo proves that two EDC participants can discover data, negotiate a contract, start a transfer, and fetch data.
-When that flow fails, the useful details are spread across browser requests, control-plane APIs, data-plane APIs, and
-Kubernetes logs. This dashboard was created as a local debugging companion and is being evolved into a Dataspace
-Use-Case Validation Platform that records and explains each step in one place.
+The dashboard is intentionally a demo/playground tool. It does not deploy or modify the MVD backend. It calls existing
+MVD services, explains each business step in stakeholder-friendly language, and preserves technical traces for deeper
+review.
 
-It is intentionally scoped as a demo/playground tool. It does not modify or deploy the MVD backend. A local Next.js
-dashboard API calls the existing MVD APIs, redacts sensitive headers and payload fields, and stores traces in a local
-SQLite database at `data/mvd-traces.sqlite`.
+For a beginner-friendly walkthrough of how the TypeScript and Next.js code fits together, read
+`docs/guides/how-this-codebase-runs.md`.
+
+## What You See In The App
+
+The root page `/` is only a platform choice screen:
+
+- `FIWARE Data Space` opens the preparation track.
+- `Eclipse Dataspace Components` opens the EDC scenario and use-case dashboard.
+
+The EDC path focuses on the business process first:
+
+1. Onboard participant.
+2. Create / publish data offer.
+3. Request data access.
+4. Access & use data.
+5. Offboard / revoke access.
+
+Each stage explains what the user sees, what the system does, who is responsible, success criteria, DSSC mapping, and
+optional technical details. Users can also add custom process cards locally in the browser.
 
 ## How It Works
 
-The UI is a Next.js App Router application. User actions call local API routes under `src/app/api`, and those routes call
-the MVD control plane or data plane through helpers in `src/lib`.
+This project uses the Next.js App Router. Pages live in `src/app`, reusable UI lives in `src/components`, and backend
+helper logic lives in `src/lib`.
 
-- `src/components/DashboardClient.tsx` owns the interactive dashboard, manual step buttons, full-flow runner, settings
-  form, trace timeline, and last-result panel.
-- `src/app/api/mvd/route.ts` is the dashboard API entry point for MVD actions such as catalog, negotiation, transfer, EDR/dataflow,
-  final data fetch, and health checks.
-- `src/lib/mvdClient.ts` performs outbound MVD HTTP calls, records each trace event, and falls back to mock responses when
-  `MVD_MOCK_MODE=auto` and a service is unavailable.
-- `src/lib/mvdFlow.ts` defines endpoint paths, request payloads, and ID extraction from MVD/EDC response shapes.
-- `src/lib/storage.ts` creates and reads the local SQLite trace database.
-- `src/lib/redaction.ts` masks API keys, authorization headers, tokens, secrets, and password-like values before storage.
+Important files:
 
-The normal flow is:
+- `src/app/page.tsx`: root platform choice page.
+- `src/app/fiware/page.tsx`: FIWARE preparation and audit page.
+- `src/app/use-cases/page.tsx`: EDC use-case overview with process visualization.
+- `src/components/ScenarioWizardClient.tsx`: guided EDC scenario runner.
+- `src/components/ProcessVisualizationClient.tsx`: stakeholder process view and local custom process cards.
+- `src/components/DeploymentStatusClient.tsx`: service reachability dashboard.
+- `src/app/api/mvd/route.ts`: API route used by the browser to run MVD actions.
+- `src/app/api/ready/route.ts`: readiness and health endpoint for the dashboard.
+- `src/lib/mvdClient.ts`: performs outbound MVD calls and records trace events.
+- `src/lib/mvdFlow.ts`: stores endpoint paths, default config, request payload builders, and ID extraction.
+- `src/lib/storage.ts`: creates and reads the local SQLite database.
+- `src/lib/redaction.ts`: masks API keys, authorization headers, tokens, secrets, and password-like values.
 
-1. Request the provider catalog from the consumer control plane.
-2. Extract the asset ID and contract offer ID.
-3. Start and poll contract negotiation until a contract agreement ID is available.
-4. Start and poll transfer until a transfer process is available.
-5. Read the open EDR/dataflow metadata from the consumer data plane.
-6. Fetch the final data through the data-plane proxy.
-7. Store every step as a trace event for timeline and sequence views.
+The normal EDC execution flow is:
+
+1. Open the Scenario Wizard from Use Cases and run a guided use-case scenario.
+2. Each wizard step calls `/api/mvd` with an action such as `requestCatalog`.
+3. `src/app/api/mvd/route.ts` loads config from `src/lib/storage.ts`.
+4. `src/lib/mvdClient.ts` builds and sends the real MVD HTTP request.
+5. The response is parsed, redacted, and stored as a trace event in `data/mvd-traces.sqlite`.
+6. Advanced Diagnostics shows the timeline, sequence view, and a single root-cause summary when a step fails.
+
+Manual step controls remain available on the legacy EDC dashboard views for ad-hoc API experiments.
 
 ## MVD Endpoint Mapping
 
-Mapped from the MVD README, Bruno collection, Kubernetes config, end-to-end tests, and local route probing:
+The configured base URLs use Kubernetes service DNS names by default. The dashboard converts user-facing health URLs to
+the correct internal management and proxy ports for actual EDC calls where needed.
 
-- Catalog: `POST {CONSUMER_CP}/api/mgmt/v4/catalog/request`
-- Start negotiation: `POST {CONSUMER_CP}/api/mgmt/v4/contractnegotiations`
-- Poll negotiation: `GET {CONSUMER_CP}/api/mgmt/v4/contractnegotiations/{id}`
-- Start transfer: `POST {CONSUMER_CP}/api/mgmt/v4/transferprocesses`
-- Poll transfer: `GET {CONSUMER_CP}/api/mgmt/v4/transferprocesses/{id}/state`
-- Open dataflow/EDR: `GET {CONSUMER_DP}/api/proxy/flows/{id}`
-- Fetch data: `GET {CONSUMER_DP}/api/proxy/flows/{id}/data`
+- Catalog: `POST {CONSUMER_CP_MANAGEMENT}/api/mgmt/v4/catalog/request`
+- Start negotiation: `POST {CONSUMER_CP_MANAGEMENT}/api/mgmt/v4/contractnegotiations`
+- Poll negotiation: `GET {CONSUMER_CP_MANAGEMENT}/api/mgmt/v4/contractnegotiations/{id}`
+- Start transfer: `POST {CONSUMER_CP_MANAGEMENT}/api/mgmt/v4/transferprocesses`
+- Poll transfer: `GET {CONSUMER_CP_MANAGEMENT}/api/mgmt/v4/transferprocesses/{id}/state`
+- Open dataflow/EDR: `GET {CONSUMER_DP_PROXY}/api/proxy/flows/{id}`
+- EDR fallback (MVD 0.17+): `GET {CONSUMER_CP_MANAGEMENT}/api/mgmt/v3/edrs/{id}/dataaddress`
+- Fetch data: `GET {CONSUMER_DP_PROXY}/api/proxy/flows/{id}/data`
 
 The HTTP management route version is `/api/mgmt/v4`. The JSON-LD context in request bodies can still be
 `https://w3id.org/edc/connector/management/v2`; that context is not the same thing as the HTTP route version.
 
-The default demo API key is `X-Api-Key: password`, matching the public MVD Bruno collection. Replace it for any
-non-demo deployment.
-
-## Run With Local MVD
-
-Deploy and seed the MVD Kubernetes demo first, then keep the Traefik port-forward running:
-
-```bash
-kubectl port-forward svc/traefik 80:80 -n traefik
-```
-
-Copy environment defaults and adjust any URLs for your machine:
-
-```bash
-cp .env.example .env.local
-```
+## Run Locally
 
 Install dependencies and start the dashboard:
 
@@ -81,45 +89,88 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+For mock-only UI exploration, set `MVD_MOCK_MODE=on`. To call a real MVD deployment, copy environment defaults and adjust
+them if needed:
+
+```bash
+cp .env.example .env.local
+```
+
+## Run With MVD
+
+Deploy and seed the MVD Kubernetes demo first. The dashboard defaults are intended for an in-cluster/EduCloud style
+deployment using service DNS names such as:
+
+- `http://controlplane.consumer.svc.cluster.local:8080`
+- `http://dataplane.consumer.svc.cluster.local:8080`
+- `http://identityhub.provider.svc.cluster.local:7083`
+- `http://traefik.traefik.svc.cluster.local:80`
+
+For local browser access through Traefik, keep a port-forward running when your setup depends on `*.localhost` routes:
+
+```bash
+kubectl port-forward svc/traefik 80:80 -n traefik
+```
+
 ## Configuration
 
 Configuration is loaded from environment variables and can also be edited from the Settings page. Settings saved through
-the UI are written to the local SQLite database, not to source files.
+the UI are written to SQLite, not source files.
 
 Important variables:
 
-- `MVD_CONSUMER_CP_URL`: consumer control-plane base URL.
-- `MVD_PROVIDER_CP_URL`: provider control-plane base URL, currently used for health checks.
-- `MVD_CONSUMER_DP_URL`: consumer data-plane proxy base URL.
+- `MVD_CONSUMER_CP_URL`: consumer control-plane health/base URL.
+- `MVD_PROVIDER_CP_URL`: provider control-plane health/base URL.
+- `MVD_CONSUMER_DP_URL`: consumer data-plane health/base URL.
+- `MVD_PROVIDER_DP_URL`: provider data-plane health/base URL.
+- `MVD_CONSUMER_IH_URL`: consumer IdentityHub DID endpoint URL.
+- `MVD_PROVIDER_IH_URL`: provider IdentityHub DID endpoint URL.
+- `MVD_PROVIDER_VAULT_URL`: provider Vault health URL.
+- `MVD_ISSUER_URL`: issuer base URL.
+- `MVD_TRAEFIK_URL`: Traefik service URL.
 - `MVD_PROVIDER_DSP_URL`: provider DSP endpoint included in catalog, contract, and transfer requests.
 - `MVD_PROVIDER_ID`: provider participant ID.
 - `MVD_API_KEY_HEADER` and `MVD_API_KEY_VALUE`: management API key header and value.
 - `MVD_MOCK_MODE`: `auto`, `on`, or `off`.
 
+## Health Checks
+
+Health checks are deliberately less strict than a normal backend readiness gate:
+
+- HTTP `200-299` is healthy.
+- IdentityHub `204 No Content` is healthy because it proves the DID endpoint is reachable.
+- Traefik `404` at `/` is shown as Warning/Reachable because it usually means Traefik is up but no route matched `/`.
+- Connection failures, timeouts, and DNS failures are Offline.
+
+The deployment status page shows a human-readable explanation first. Checked URL, status code, latency, and raw errors
+remain available in technical detail panels and Advanced Diagnostics.
+
 ## Mock Mode
 
-`MVD_MOCK_MODE=auto` is the default. The dashboard API tries the real MVD service and falls back to MVD-like mock responses only
-when a service call fails. Use `MVD_MOCK_MODE=on` to demo the UI without MVD, or `MVD_MOCK_MODE=off` to fail fast when a
-service is unavailable.
+`MVD_MOCK_MODE=auto` tries the real MVD service and falls back to MVD-like mock responses only when a service call fails.
+Use `MVD_MOCK_MODE=on` to demo the UI without MVD, or `MVD_MOCK_MODE=off` to fail fast when a service is unavailable.
 
-Mock mode is deliberately explicit in trace results. A recorded event still shows the real URL that would have been
-called, plus whether mock data was used.
+Mock mode is explicit in trace results. A recorded event still shows the real URL that would have been called, plus
+whether mock data was used.
 
 ## Dashboard Features
 
-- Settings page for control-plane, data-plane, IdentityHub, issuer, and API key configuration.
-- Manual execution for catalog, negotiation, transfer, EDR/dataflow, and data fetch steps.
-- "Run Full Demo Flow" orchestration with polling.
+- Platform choice page for FIWARE vs EDC.
+- FIWARE preparation page using guided demo and DSSC audit patterns.
+- EDC process visualization with swimlane-like actors and local custom process cards.
+- Scenario wizard with big numbered steps and mini executable steps (primary way to run use cases).
+- Plain-language result summaries with technical logs hidden behind toggles.
+- Settings page for service URLs and credentials.
+- Deployment status page with reachable/warning/offline health classification.
+- Execution History for saved scenario runs.
+- Advanced Diagnostics for trace timeline, sequence view, and root-cause analysis (read-only; scenarios are run from the wizard).
 - SQLite-backed traces and trace events.
-- Redacted headers and payload display with explicit reveal controls.
-- Timeline and generated sequence view.
-- EduCloud-ready liveness/readiness endpoints and Kubernetes scaffolding.
+- Redacted headers and payload display.
 
-## Redesign And Deployment Plan
+## Documentation
 
-See `docs/validation-platform-redesign.md` for the refactored architecture proposal, folder structure, updated UI
-hierarchy, component breakdown, storage requirements, Kubernetes deployment structure, EduCloud checklist, and migration
-plan from the original trace dashboard.
+- `docs/guides/how-this-codebase-runs.md`: beginner-friendly explanation of the TypeScript/Next.js codebase.
+- `docs/guides/validation-platform-redesign.md`: broader redesign and deployment plan.
 
 ## Commit And Repository Safety
 
@@ -146,13 +197,10 @@ Use `npm run build` when you want to verify a production Next.js build.
 
 ## Troubleshooting
 
+- `npm run dev` fails with missing `package.json`: run it from this `mvd-trace-dashboard` folder, not the MVD backend folder.
 - `404` for `/api/management/...`: this MVD deployment exposes `/api/mgmt/v4/...`; test catalog with `POST`, not `GET`.
+- Traefik shows `404` at `/`: Traefik may still be reachable; use a hostname route or check Deployment Status.
 - `502 Unable to obtain credentials`: the route is reachable, but the MVD connector cannot obtain its participant STS
   client secret from the vault.
-- Missing offer, negotiation, agreement, or transfer IDs: open the Last Result panel and inspect the latest redacted
-  response shape. `src/lib/mvdFlow.ts` contains the extraction logic.
+- Missing offer, negotiation, agreement, or transfer IDs: inspect the latest trace in Advanced Diagnostics.
 - Hydration warnings after code changes: refresh the page so Turbopack serves the latest client bundle.
-
-## Known Assumptions
-
-See `TODO.md` for endpoint assumptions that should be re-confirmed against future MVD versions.
