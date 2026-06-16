@@ -88,8 +88,9 @@ export const coreDemoStages: CoreDemoStage[] = [
     shortTitle: "Offboard",
     playbookTiming: "2–3 min",
     showAndDescribe: [
-      "Offboarding: unsubscribing or removing an account",
-      "Process for revocation of data access",
+      "Terminate the active data transfer",
+      "Revoke membership credential in IssuerService",
+      "Confirm data-plane access denial",
     ],
     buildingBlocks: ["Governance", "Participation Management"],
     responsibleActor: "Governance / Trust with Provider control",

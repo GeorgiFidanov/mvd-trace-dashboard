@@ -186,9 +186,9 @@ export const wizardSteps: WizardStepDefinition[] = [
     action: "offboardParticipant",
     playbookStage: 5,
     explanation:
-      "Walk through how governance removes a participant or revokes access. In this playground the step records the business checklist; production deployments would revoke credentials and deny the next request.",
-    successCriteria: "The offboarding and revocation process is explained with audit evidence linked to this run.",
-    outcomeSummary: "Access revocation is documented and a follow-up request would be denied in production.",
+      "Terminate the active transfer, revoke the consumer membership credential in IssuerService (IdentityHub trust layer), then confirm the data plane denies a follow-up fetch.",
+    successCriteria: "Transfer is terminated, credential status is revocation, and data fetch is denied.",
+    outcomeSummary: "Access and trust are revoked — transfer terminated, membership VC revoked, data plane rejected the retry.",
   },
   {
     id: "identity-verification",

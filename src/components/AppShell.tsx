@@ -21,6 +21,7 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const onFiwarePage = pathname === "/fiware" || pathname.startsWith("/fiware/");
   const [theme, setTheme] = useState<AppTheme>("edc");
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -135,10 +136,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <p className={`font-semibold ${theme === "edc" ? "text-slate-200" : "text-stone-800"}`}>
                     Pink Panther · Dataspace Validation Dashboard
                   </p>
-                  <p className="text-xs opacity-70">Built for FIWARE and EDC MVD learning, validation, and project evidence.</p>
+                  <p className="text-xs opacity-70">
+                    {onFiwarePage
+                      ? "FIWARE dataspace preparation and audit rehearsal track."
+                      : "EDC MVD validation, Core Demo onboarding, and Show & Tell evidence."}
+                  </p>
                 </div>
               </div>
-              <p className="text-xs opacity-60">Semester 4 group project · EDC MVD / FIWARE dashboard</p>
+              <p className="text-xs opacity-60">
+                {onFiwarePage ? "Semester 4 group project · FIWARE preparation track" : "Semester 4 group project · EDC MVD dashboard"}
+              </p>
             </div>
           </footer>
         </main>

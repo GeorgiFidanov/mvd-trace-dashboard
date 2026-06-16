@@ -8,6 +8,11 @@ import {
   requestCatalog,
   startContractNegotiation,
   startTransfer,
+  terminateTransfer,
+  queryConsumerCredentials,
+  revokeConsumerCredential,
+  verifyAccessRevoked,
+  verifyCredentialRevoked,
 } from "@/lib/mvdClient";
 import { getConfig } from "@/lib/storage";
 
@@ -44,10 +49,10 @@ export async function POST(request: Request) {
             path: "",
             warningStatuses: routeReachableStatuses,
           }),
-          issuer: await healthCheck(config.issuerUrl, {
+          issuer: await healthCheck(config.issuerHealthUrl, {
             service: "Issuer",
-            path: "",
-            dedicatedHealthEndpoint: false,
+            path: "/api/check/readiness",
+            dedicatedHealthEndpoint: true,
             warningStatuses: routeReachableStatuses,
           }),
           traefik: await healthCheck(config.traefikUrl, {
@@ -116,6 +121,46 @@ export async function POST(request: Request) {
             useCaseId: body.useCaseId,
             transferProcessId: required(body.transferProcessId, "transferProcessId"),
             accessToken: body.accessToken,
+          }),
+        );
+      case "terminateTransfer":
+        return Response.json(
+          await terminateTransfer(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            transferProcessId: required(body.transferProcessId, "transferProcessId"),
+            reason: body.reason,
+          }),
+        );
+      case "verifyAccessRevoked":
+        return Response.json(
+          await verifyAccessRevoked(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            transferProcessId: required(body.transferProcessId, "transferProcessId"),
+          }),
+        );
+      case "queryConsumerCredentials":
+        return Response.json(
+          await queryConsumerCredentials(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+          }),
+        );
+      case "revokeConsumerCredential":
+        return Response.json(
+          await revokeConsumerCredential(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            credentialResourceId: required(body.credentialResourceId, "credentialResourceId"),
+          }),
+        );
+      case "verifyCredentialRevoked":
+        return Response.json(
+          await verifyCredentialRevoked(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            credentialResourceId: required(body.credentialResourceId, "credentialResourceId"),
           }),
         );
       default:

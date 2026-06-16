@@ -431,7 +431,7 @@ function scenarioDssc(useCaseId: string) {
   const mapping: Record<string, { buildingBlock: string; technicalDetails: string }> = {
     "UC-CORE": {
       buildingBlock: "Participants & Roles; Data Offering; Usage Control; Data Exchange; Governance",
-      technicalDetails: "Five playbook steps mapped to health, catalog, negotiation, transfer/data fetch, and guided offboarding.",
+      technicalDetails: "Five playbook steps mapped to health, catalog, negotiation, transfer/data fetch, and transfer terminate + access denial.",
     },
     "UC-E1": {
       buildingBlock: "Publication & Discovery; Contract Management; Data Exchange",

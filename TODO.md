@@ -7,7 +7,7 @@
 
 # Platform TODO
 
-- Investigate consumer data-plane `fetchData` HTTP 500 responses against the deployed MVD demo (dataplane proxy / flow data endpoint).
+- Investigate consumer data-plane `fetchData` HTTP 500 responses against the deployed MVD cluster (dataplane proxy / flow data endpoint).
 - Re-run `identityhub-seed` for the consumer namespace if credential issuance is still blocked after a Vault reset.
 
 # Recently completed

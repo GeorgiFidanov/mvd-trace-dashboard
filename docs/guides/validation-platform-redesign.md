@@ -2,8 +2,7 @@
 
 ## 1. Refactored Architecture Proposal
 
-The dashboard is no longer positioned as an EDC operations/debugging console. It is a scenario-facing validation
-platform that explains dataspace behavior through use cases, while preserving trace-level diagnostics for evaluators.
+The dashboard is a scenario-facing validation platform that explains dataspace behavior through use cases, while preserving trace-level diagnostics for evaluators. Wizard steps call the live MVD stack by default (`MVD_MOCK_MODE=off`).
 
 The target architecture has three layers:
 
@@ -84,7 +83,7 @@ k8s/
 
 ## 5. Database And Storage Requirements
 
-The current SQLite store remains acceptable for a local demonstrator and single-pod EduCloud pilot:
+The current SQLite store remains acceptable for a local validation deployment and single-pod EduCloud pilot:
 
 - `traces`: scenario execution summary and extracted EDC IDs.
 - `trace_events`: step-level requests, responses, redacted headers, extracted IDs, status, and timing.
@@ -125,7 +124,7 @@ connectivity. Liveness uses `GET /api/health`.
 - Confirm network policies allow the dashboard pod to reach consumer CP, provider CP, and consumer DP.
 - Decide whether local SQLite with `emptyDir` is acceptable or whether persistent/shared storage is required.
 - Set `NEXT_PUBLIC_CLUSTER_NAME`, `NEXT_PUBLIC_ENVIRONMENT`, and `NEXT_PUBLIC_OTEL_ENDPOINT`.
-- Confirm `/api/ready` returns 200 before demonstrations.
+- Confirm `/api/ready` returns 200 before running validation scenarios.
 - Add authentication before exposing the dashboard beyond trusted project users.
 
 ## 8. Migration Plan From The Current Dashboard

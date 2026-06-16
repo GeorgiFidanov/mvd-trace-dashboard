@@ -38,7 +38,12 @@ export async function GET(request: Request) {
       warningStatuses: routeReachableStatuses,
     }),
     healthCheck(config.providerVaultUrl, { service: "Provider Vault", path: "", warningStatuses: routeReachableStatuses }),
-    healthCheck(config.issuerUrl, { service: "Issuer", path: "", dedicatedHealthEndpoint: false, warningStatuses: routeReachableStatuses }),
+    healthCheck(config.issuerHealthUrl, {
+      service: "Issuer",
+      path: "/api/check/readiness",
+      dedicatedHealthEndpoint: true,
+      warningStatuses: routeReachableStatuses,
+    }),
     healthCheck(config.traefikUrl, {
       service: "Traefik",
       path: "",

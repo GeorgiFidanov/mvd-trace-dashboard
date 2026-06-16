@@ -97,3 +97,15 @@ export function mockFinalData() {
     },
   ];
 }
+
+export const mockMembershipCredentialId = "mock-membership-credential-1";
+
+export function mockIssuerCredentials() {
+  return [
+    {
+      "@id": mockMembershipCredentialId,
+      holderId: "did:web:identityhub.consumer.svc.cluster.local%3A7083:consumer",
+      credentialTypes: ["MembershipCredential"],
+    },
+  ];
+}

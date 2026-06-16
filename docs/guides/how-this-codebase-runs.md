@@ -8,6 +8,8 @@ turns into a recorded dataspace trace.
 
 This is a Next.js application written in TypeScript.
 
+**Default behaviour:** `MVD_MOCK_MODE=off` — wizard steps call the live MVD deployment. Mock responses are available only when you explicitly set mock mode to `on`.
+
 - React components render the pages you see in the browser.
 - Next.js App Router turns files under `src/app` into routes.
 - API route files under `src/app/api` run on the server, not in the browser.
@@ -70,10 +72,11 @@ URLs that the browser should not call directly.
 The `src/lib` folder contains plain TypeScript modules. They are not pages. They are reusable logic.
 
 - `src/lib/mvdFlow.ts`: endpoint paths, default config, request body builders, and ID extraction.
-- `src/lib/mvdClient.ts`: actual MVD HTTP calls, health checks, mock fallback, and trace event recording.
+- `src/lib/mvdClient.ts`: MVD HTTP calls, IssuerService OAuth, health checks, optional mock mode, and trace recording.
+- `src/lib/issuerAuth.ts`: Keycloak token for IssuerService admin API (offboarding).
 - `src/lib/storage.ts`: SQLite setup and database functions.
 - `src/lib/redaction.ts`: removes or masks sensitive values before storing traces.
-- `src/lib/mockMvd.ts`: fake MVD responses for demos without a backend.
+- `src/lib/mockMvd.ts`: canned responses used only when `MVD_MOCK_MODE=on`.
 - `src/lib/useCases.ts`: scenario metadata used by the UI.
 - `src/lib/types.ts`: shared TypeScript types.
 
@@ -117,27 +120,18 @@ A `page.tsx` file renders UI. A `route.ts` file handles HTTP requests.
 1. You run `npm run dev`.
 2. Next.js starts a development server.
 3. You open `http://localhost:3000`.
-4. Next.js renders `src/app/page.tsx`.
+4. Next.js renders `src/app/page.tsx` — the Core Demo home page with links into `/scenario-wizard`.
 5. `src/app/page.tsx` wraps the content in `AppShell`.
-6. The page shows two platform cards:
-  - FIWARE Data Space.
-  - Eclipse Dataspace Components.
+6. The sidebar navigates to the scenario wizard, use cases, execution history, diagnostics, and settings.
 
 `AppShell` is the shared layout around most pages. It provides the sidebar navigation and page container.
 
-## What Happens When You Click The EDC Track
+## What Happens When You Open The Core Demo Wizard
 
-The EDC card links to `/use-cases`.
+The primary EDC path is `/scenario-wizard?useCase=UC-CORE` (use case label **Core Demo**).
 
-`src/app/use-cases/page.tsx` renders:
-
-- Intro text for EDC validation scenarios.
-- `ProcessVisualizationClient`.
-- `UseCaseCards`.
-
-`ProcessVisualizationClient` is a client component. It has static default process steps and lets you add custom process
-steps locally. The custom cards are stored in browser `localStorage`, so they survive refreshes in the same browser but
-are not stored in SQLite or committed to source code.
+`/use-cases` lists technical validation scenarios (UC-E1 … UC-E6) and includes `ProcessVisualizationClient` for static
+process diagrams. `/fiware` is a separate presentation track with no MVD backend calls.
 
 ## What Happens In The Scenario Wizard
 
@@ -192,6 +186,11 @@ Example actions:
 - `getTransfer`
 - `getEdrOrDataflow`
 - `fetchData`
+- `terminateTransfer`
+- `queryConsumerCredentials`
+- `revokeConsumerCredential`
+- `verifyCredentialRevoked`
+- `verifyAccessRevoked`
 
 This pattern is called a dispatcher. One route receives many related actions and dispatches them to specific functions.
 
@@ -327,7 +326,7 @@ The dashboard stores traces, but it tries not to store secrets in plain text.
 
 This is why Advanced Diagnostics can show useful technical evidence without casually exposing every credential.
 
-It is still a developer/demo tool, so do not expose it publicly without authentication and a security review.
+It is a local validation tool with access to cluster management APIs, so do not expose it publicly without authentication and a security review.
 
 ## Health Checks
 
@@ -361,7 +360,7 @@ This project uses types to describe shared shapes:
 export type MvdConfig = {
   consumerControlPlaneUrl: string;
   providerControlPlaneUrl: string;
-  mockMode: "auto" | "on" | "off";
+  mockMode: "on" | "off";
 };
 ```
 
@@ -470,7 +469,9 @@ MVD track.
 
 ### Why is there mock mode?
 
-Mock mode lets you demo the UI and learn the flow even when MVD is not running or a service is temporarily unavailable.
+Mock mode is **off by default**. Set `MVD_MOCK_MODE=on` only when you want to click through the UI without a running MVD
+cluster. With mock mode off, failed calls (for example catalog `502` when Vault secrets are missing) appear immediately in
+traces — that is the intended validation behaviour.
 
 ## Useful Commands
 

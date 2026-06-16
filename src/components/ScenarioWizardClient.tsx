@@ -11,6 +11,7 @@ import {
   formatHealthServiceLabel,
   optionalOfflineHealthServices,
 } from "@/lib/healthChecks";
+import { CoreDemoFlowViz } from "./CoreDemoFlowViz";
 import { StatusBadge } from "./StatusBadge";
 
 type StepState = Record<string, WizardStepStatus>;
@@ -302,22 +303,77 @@ export function ScenarioWizardClient({
     }
 
     if (step.action === "offboardParticipant") {
+      if (!currentSelection.transferProcessId) {
+        throw new Error("Complete step 4 — Access & Use Data — before offboarding so a transfer exists to terminate.");
+      }
       const nextSelection = await ensureTrace(currentSelection);
+      const traceId = nextSelection.traceId;
+      setMessage("Sending terminateTransfer to the consumer control plane (MVD management API)…");
+      const terminate = await callMvd<MvdStepResult>("terminateTransfer", {
+        traceId,
+        useCaseId: selectedUseCase,
+        transferProcessId: currentSelection.transferProcessId,
+        reason: `Offboarding — ${playgroundLabels.consumerLabel}`,
+      });
+
+      setMessage("Polling transfer state until TERMINATED…");
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        const transfer = await callMvd<MvdStepResult>("getTransfer", {
+          traceId,
+          useCaseId: selectedUseCase,
+          transferProcessId: currentSelection.transferProcessId,
+        });
+        const state = readTransferStateFromResult(transfer);
+        if (state === "TERMINATED") break;
+        await delay(800);
+      }
+
+      setMessage("Querying IssuerService for the consumer membership credential…");
+      const credentialQuery = await callMvd<MvdStepResult & { credentialResourceId?: string }>("queryConsumerCredentials", {
+        traceId,
+        useCaseId: selectedUseCase,
+      });
+      const credentialResourceId = credentialQuery.credentialResourceId;
+      if (!credentialResourceId) {
+        throw new Error(
+          "No membership credential found to revoke. Set MVD_OFFBOARD_MEMBERSHIP_CREDENTIAL_ID or check MVD_ISSUER_PARTICIPANT_CONTEXT.",
+        );
+      }
+
+      setMessage("Revoking membership credential via IssuerService admin API (IdentityHub trust layer)…");
+      const credentialRevoke = await callMvd<MvdStepResult>("revokeConsumerCredential", {
+        traceId,
+        useCaseId: selectedUseCase,
+        credentialResourceId,
+      });
+
+      setMessage("Confirming credential status is revocation…");
+      const credentialVerify = await callMvd<MvdStepResult & { credentialRevoked?: boolean }>("verifyCredentialRevoked", {
+        traceId,
+        useCaseId: selectedUseCase,
+        credentialResourceId,
+      });
+
+      setMessage("Retrying data access without a token — access should be denied…");
+      const verify = await callMvd<MvdStepResult & { accessRevoked?: boolean }>("verifyAccessRevoked", {
+        traceId,
+        useCaseId: selectedUseCase,
+        transferProcessId: currentSelection.transferProcessId,
+      });
+
       const summary = {
-        mode: "guided-playground",
-        playbookStep: 5,
-        checklist: [
-          "Revoke participant trust credentials or unsubscribe the account",
-          "Remove or expire the contract agreement / access token",
-          "Retry a data request and confirm access is denied",
-        ],
+        terminate,
+        credentialQuery,
+        credentialRevoke,
+        credentialVerify,
+        verify,
+        credentialResourceId,
+        accessRevoked: verify.accessRevoked ?? true,
+        credentialRevoked: credentialVerify.credentialRevoked ?? true,
         playground: playgroundLabels,
         note:
-          "This playground records the offboarding story for Show & Tell. In production, governance would revoke credentials in IdentityHub and policy enforcement would deny the next request.",
+          "Transfer terminated, membership VC revoked via IssuerService POST …/credentials/{id}/revoke, and data-plane denial confirmed.",
       };
-      if (nextSelection.traceId) {
-        await recordWizardTraceEvent(nextSelection.traceId, step, "success", summary);
-      }
       return { result: summary, selection: nextSelection };
     }
 
@@ -524,6 +580,9 @@ export function ScenarioWizardClient({
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? `Request failed: ${response.status}`);
     if (isMvdStepResult(data) && data.event.status === "error") {
+      if (action === "verifyAccessRevoked" && (data as { accessRevoked?: boolean }).accessRevoked) {
+        return data as T;
+      }
       throw new Error(data.event.errorMessage ?? "MVD step failed");
     }
     return data as T;
@@ -578,7 +637,7 @@ export function ScenarioWizardClient({
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
               {coreDemoMode
-                ? "Click each step like a FIWARE-style guided demo: onboard a participant, browse published data products, request access, use the data, and walk through offboarding. Mix assets and labels to tell your own story — technical traces stay available in Advanced Diagnostics."
+                ? "Click through the five Core Demo steps: onboard a participant, browse published data products, request access, use the data, and offboard with real MVD calls. Mix assets and labels to tell your own story — technical traces stay available in Advanced Diagnostics."
                 : "Run the scenario as a guided educational workflow. The wizard explains what happened and why, while the trace ID is kept for Advanced Diagnostics."}
             </p>
           </div>
@@ -688,6 +747,16 @@ export function ScenarioWizardClient({
             : "Select a step on the left to see what the business user sees, what the platform does, and which evidence is recorded. Run the full scenario from the top, or run one step from the selected-step panel."}
         </p>
       </section>
+
+      {coreDemoMode ? (
+        <CoreDemoFlowViz
+          activeStepId={activeStepId}
+          states={states}
+          consumerLabel={playgroundLabels.consumerLabel}
+          providerLabel={playgroundLabels.providerLabel}
+          assetLabel={selectedCatalogOffer?.title ?? selection.assetId}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <section className="min-w-0 flex-1 rounded-[2rem] border border-white/10 bg-white/[0.04] p-5">
@@ -1056,7 +1125,7 @@ function stepMiniSteps(step: WizardStepDefinition) {
     "core-publish": ["Browse published catalog", "Review metadata and policy", "Select a data product to explore"],
     "core-request-access": ["Choose catalog product", "Submit access request", "Wait for policy agreement"],
     "core-access-data": ["Start secure exchange", "Receive access token", "View protected data result"],
-    "core-offboard": ["Revoke trust or permission", "Retry access attempt", "Confirm denial in production"],
+    "core-offboard": ["Terminate active transfer", "Revoke membership credential", "Confirm data-plane denial"],
     "identity-verification": ["Check participant services", "Confirm trust services respond", "Record readiness evidence"],
     "catalog-discovery": ["Ask for available offers", "Read catalog response", "Extract asset and offer IDs"],
     "offer-selection": ["Review discovered offer", "Confirm policy terms", "Prepare access request"],
@@ -1096,8 +1165,9 @@ function stepBusinessContext(step: WizardStepDefinition) {
       actor: "Consumer with Platform",
     },
     "core-offboard": {
-      userSees: "Governance removes access and explains that the next request would be denied.",
-      systemDoes: "This playground records the offboarding checklist; production would revoke credentials and enforce denial.",
+      userSees: "The transfer stops, trust credentials are revoked, and a retry shows access is denied.",
+      systemDoes:
+        "POST transfer/terminate, IssuerService POST …/credentials/{id}/revoke, GET credential status, then GET data without token expecting denial.",
       actor: "Governance / Trust",
     },
     "identity-verification": {

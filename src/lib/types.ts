@@ -8,10 +8,17 @@ export type MvdConfig = {
   providerDataPlaneUrl: string;
   providerDspUrl: string;
   providerId: string;
+  consumerId: string;
+  issuerParticipantContext: string;
   consumerIdentityHubUrl: string;
   providerIdentityHubUrl: string;
   providerVaultUrl: string;
   issuerUrl: string;
+  issuerHealthUrl: string;
+  keycloakUrl: string;
+  keycloakRealm: string;
+  issuerOAuthClientId: string;
+  issuerOAuthClientSecret: string;
   traefikUrl: string;
   apiKeyHeader: string;
   apiKeyValue: string;

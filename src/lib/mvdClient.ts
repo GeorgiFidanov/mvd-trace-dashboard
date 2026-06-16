@@ -2,17 +2,25 @@ import {
   apiHeaders,
   buildCatalogRequest,
   buildContractRequest,
+  buildIssuerCredentialsQuery,
+  buildTerminateTransferRequest,
   buildTransferRequest,
   dataPlaneProxyUrl,
   extractCatalogSelection,
+  extractCredentialResources,
   extractIds,
   isTransferReadyState,
+  issuerEndpoints,
   joinUrl,
   managementUrl,
   mvdEndpoints,
+  pickMembershipCredentialResource,
+  readCredentialStatusLabel,
   readTransferState,
+  isDataPlaneAccessDenied,
 } from "./mvdFlow";
-import { mockCatalog, mockDataflow, mockFinalData, mockNegotiation, mockOpenDataflows, mockTransfer } from "./mockMvd";
+import { mockCatalog, mockDataflow, mockFinalData, mockIssuerCredentials, mockMembershipCredentialId, mockNegotiation, mockOpenDataflows, mockTransfer } from "./mockMvd";
+import { issuerAdminHeaders } from "./issuerAuth";
 import { redactHeaders, redactJson } from "./redaction";
 import { addTraceEvent, createTrace, getTrace, updateTrace } from "./storage";
 import type { HealthCheckResult, MvdConfig, MvdStepResult, Trace, TraceEventStatus } from "./types";
@@ -29,6 +37,7 @@ type StepCall = {
   body?: unknown;
   mockResponse: unknown;
   mockMode: MvdConfig["mockMode"];
+  allowError?: boolean;
 };
 
 export async function requestCatalog(config: MvdConfig, traceId?: string, useCaseId?: string) {
@@ -203,6 +212,147 @@ export async function fetchData(config: MvdConfig, args: { traceId?: string; use
   return result;
 }
 
+export async function terminateTransfer(
+  config: MvdConfig,
+  args: { traceId?: string; useCaseId?: string; transferProcessId: string; reason?: string },
+) {
+  const body = buildTerminateTransferRequest(args.reason);
+  const result = await callMvd({
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    stepName: "terminateTransfer",
+    actor: "Dashboard API",
+    target: "Consumer Control Plane",
+    method: "POST",
+    url: joinUrl(managementUrl(config.consumerControlPlaneUrl), mvdEndpoints.terminateTransfer(args.transferProcessId)),
+    headers: apiHeaders(config),
+    body,
+    mockResponse: null,
+    mockMode: config.mockMode,
+  });
+  result.trace = updateTrace(result.trace.id, {
+    transferProcessId: args.transferProcessId,
+    status: "running",
+  });
+  return result;
+}
+
+export async function verifyAccessRevoked(
+  config: MvdConfig,
+  args: { traceId?: string; useCaseId?: string; transferProcessId: string },
+) {
+  const result = await callMvd({
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    stepName: "verifyAccessRevoked",
+    actor: "Dashboard API",
+    target: "Consumer Data Plane",
+    method: "GET",
+    url: joinUrl(dataPlaneProxyUrl(config.consumerDataPlaneUrl), mvdEndpoints.fetchData(args.transferProcessId)),
+    mockResponse: { denied: true },
+    mockMode: config.mockMode,
+    allowError: true,
+  });
+  const denied = isDataPlaneAccessDenied(result.event.responseStatus, result.data);
+  result.trace = updateTrace(result.trace.id, {
+    transferProcessId: args.transferProcessId,
+    status: denied ? "success" : "error",
+  });
+  if (!denied) {
+    throw new Error(
+      "Access was still allowed after termination — expected the data plane to deny the request (HTTP ≥400, denied flag, or empty flow).",
+    );
+  }
+  return { ...result, accessRevoked: true as const };
+}
+
+export async function queryConsumerCredentials(
+  config: MvdConfig,
+  args: { traceId?: string; useCaseId?: string },
+) {
+  const body = buildIssuerCredentialsQuery();
+  const headers = await issuerAdminHeaders(config);
+  const result = await callMvd({
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    stepName: "queryConsumerCredentials",
+    actor: "Dashboard API",
+    target: "Issuer Service (IdentityHub)",
+    method: "POST",
+    url: joinUrl(config.issuerUrl, issuerEndpoints.queryCredentials(config.issuerParticipantContext)),
+    headers,
+    body,
+    mockResponse: mockIssuerCredentials(),
+    mockMode: config.mockMode,
+  });
+  const resources = extractCredentialResources(result.data);
+  const credentialResourceId =
+    process.env.MVD_OFFBOARD_MEMBERSHIP_CREDENTIAL_ID ??
+    pickMembershipCredentialResource(resources, config.consumerId);
+  if (!credentialResourceId && config.mockMode !== "on") {
+    throw new Error(
+      "No membership credential resource id found. Check IssuerService reachability, MVD_ISSUER_PARTICIPANT_CONTEXT, or set MVD_OFFBOARD_MEMBERSHIP_CREDENTIAL_ID.",
+    );
+  }
+  return { ...result, credentialResourceId: credentialResourceId ?? mockMembershipCredentialId, resources };
+}
+
+export async function revokeConsumerCredential(
+  config: MvdConfig,
+  args: { traceId?: string; useCaseId?: string; credentialResourceId: string },
+) {
+  const headers = await issuerAdminHeaders(config);
+  const result = await callMvd({
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    stepName: "revokeConsumerCredential",
+    actor: "Dashboard API",
+    target: "Issuer Service (IdentityHub)",
+    method: "POST",
+    url: joinUrl(
+      config.issuerUrl,
+      issuerEndpoints.revokeCredential(config.issuerParticipantContext, args.credentialResourceId),
+    ),
+    headers,
+    body: {},
+    mockResponse: null,
+    mockMode: config.mockMode,
+  });
+  return { ...result, credentialResourceId: args.credentialResourceId };
+}
+
+export async function verifyCredentialRevoked(
+  config: MvdConfig,
+  args: { traceId?: string; useCaseId?: string; credentialResourceId: string },
+) {
+  const headers = await issuerAdminHeaders(config);
+  const result = await callMvd({
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    stepName: "verifyCredentialRevoked",
+    actor: "Dashboard API",
+    target: "Issuer Service (IdentityHub)",
+    method: "GET",
+    url: joinUrl(
+      config.issuerUrl,
+      issuerEndpoints.credentialStatus(config.issuerParticipantContext, args.credentialResourceId),
+    ),
+    headers,
+    mockResponse: "revocation",
+    mockMode: config.mockMode,
+  });
+  const label = readCredentialStatusLabel(result.data);
+  const revoked = label === "revocation" || label === "revoked" || label?.includes("revoc");
+  if (!revoked) {
+    throw new Error(
+      label
+        ? `Credential status is "${label}" — expected revocation after offboarding.`
+        : "Credential status is empty — expected revocation after offboarding.",
+    );
+  }
+  return { ...result, credentialRevoked: true as const };
+}
+
 type HealthCheckOptions = {
   service: string;
   path?: string;
@@ -335,6 +485,12 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
     }
   }
 
+  if (useMock && call.stepName === "verifyAccessRevoked") {
+    responseStatus = 403;
+    status = "error";
+    errorMessage = "Mock data plane denied access after termination.";
+  }
+
   const completed = Date.now();
   const data = status === "error" && responseBodyIsFallback(responseBody) ? responseBody.data : responseBody;
   const extractedIds = extractIds(call.stepName, data);
@@ -358,7 +514,7 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
   });
 
   const result = { trace: trace as Trace, event, data, mock: useMock || responseBodyIsFallback(responseBody) };
-  if (status === "error" && !responseBodyIsFallback(responseBody)) {
+  if (status === "error" && !responseBodyIsFallback(responseBody) && !call.allowError) {
     throw new Error(errorMessage ?? `${call.stepName} failed`);
   }
   return result;

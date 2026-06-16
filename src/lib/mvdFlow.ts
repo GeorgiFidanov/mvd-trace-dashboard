@@ -18,20 +18,33 @@ export const defaultConfig: MvdConfig = {
   providerId:
     process.env.MVD_PROVIDER_ID ??
     "did:web:identityhub.provider.svc.cluster.local%3A7083:provider",
+  consumerId:
+    process.env.MVD_CONSUMER_ID ??
+    "did:web:identityhub.consumer.svc.cluster.local%3A7083:consumer",
+  issuerParticipantContext: process.env.MVD_ISSUER_PARTICIPANT_CONTEXT ?? "issuer",
   consumerIdentityHubUrl:
     process.env.MVD_CONSUMER_IH_URL ?? "http://identityhub.consumer.svc.cluster.local:7083",
   providerIdentityHubUrl:
     process.env.MVD_PROVIDER_IH_URL ?? "http://identityhub.provider.svc.cluster.local:7083",
   providerVaultUrl:
     process.env.MVD_PROVIDER_VAULT_URL ?? "http://vault.provider.svc.cluster.local:8200/v1/sys/health",
-  issuerUrl: process.env.MVD_ISSUER_URL ?? "http://issuerservice.issuer.svc.cluster.local:8080/admin",
+  issuerUrl:
+    process.env.MVD_ISSUER_URL ??
+    "http://issuerservice.issuer.svc.cluster.local:10013/api/admin/v1alpha",
+  issuerHealthUrl:
+    process.env.MVD_ISSUER_HEALTH_URL ??
+    "http://issuerservice.issuer.svc.cluster.local:10010",
+  keycloakUrl: process.env.MVD_KEYCLOAK_URL ?? "http://keycloak.mvd-common.svc.cluster.local:8080",
+  keycloakRealm: process.env.MVD_KEYCLOAK_REALM ?? "mvd",
+  issuerOAuthClientId: process.env.MVD_ISSUER_OAUTH_CLIENT_ID ?? "issuer",
+  issuerOAuthClientSecret: process.env.MVD_ISSUER_OAUTH_CLIENT_SECRET ?? "issuer-secret",
   traefikUrl: process.env.MVD_TRAEFIK_URL ?? "http://traefik.traefik.svc.cluster.local:80",
   apiKeyHeader: process.env.MVD_API_KEY_HEADER ?? "X-Api-Key",
   apiKeyValue: process.env.MVD_API_KEY_VALUE ?? "password",
   mockMode:
     process.env.MVD_MOCK_MODE === "on" || process.env.MVD_MOCK_MODE === "off"
       ? process.env.MVD_MOCK_MODE
-      : "auto",
+      : "off",
   publicApiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000",
   clusterName: process.env.NEXT_PUBLIC_CLUSTER_NAME ?? "local-mvd",
   environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? "local",
@@ -52,7 +65,64 @@ export const mvdEndpoints = {
   fetchData: (id: string) => `/api/proxy/flows/${encodeURIComponent(id)}/data`,
   /** MVD 0.17+ stores EDR on consumer control-plane management API when proxy flow is not open yet. */
   getEdrDataAddress: (id: string) => `/api/mgmt/v3/edrs/${encodeURIComponent(id)}/dataaddress`,
+  terminateTransfer: (id: string) => `/api/mgmt/v4/transferprocesses/${encodeURIComponent(id)}/terminate`,
 };
+
+export const issuerEndpoints = {
+  queryCredentials: (participantContextId: string) =>
+    `/participants/${encodeURIComponent(participantContextId)}/credentials/query`,
+  revokeCredential: (participantContextId: string, credentialResourceId: string) =>
+    `/participants/${encodeURIComponent(participantContextId)}/credentials/${encodeURIComponent(credentialResourceId)}/revoke`,
+  credentialStatus: (participantContextId: string, credentialResourceId: string) =>
+    `/participants/${encodeURIComponent(participantContextId)}/credentials/${encodeURIComponent(credentialResourceId)}/status`,
+};
+
+export function buildIssuerCredentialsQuery() {
+  return {};
+}
+
+export function extractCredentialResources(body: unknown): Record<string, unknown>[] {
+  if (Array.isArray(body)) {
+    return body.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null);
+  }
+  const record = asRecord(body);
+  if (!record) return [];
+  const nested = record.content ?? record["@graph"] ?? record.items ?? body;
+  return arrayOfRecords(nested);
+}
+
+export function pickMembershipCredentialResource(credentials: Record<string, unknown>[], consumerDid: string) {
+  const consumerNeedle = consumerDid.toLowerCase();
+  const membership = credentials.find((item) => {
+    const blob = JSON.stringify(item).toLowerCase();
+    const credential = asRecord(item.credential);
+    const types = credential?.type;
+    const typeBlob = Array.isArray(types) ? types.join(" ").toLowerCase() : String(types ?? "").toLowerCase();
+    const holder = stringOrUndefined(item.holderId ?? item.participantId ?? item.holder)?.toLowerCase() ?? "";
+    const holderMatches = !consumerNeedle || !holder || holder.includes(consumerNeedle) || consumerNeedle.includes(holder);
+    return holderMatches && (blob.includes("membership") || typeBlob.includes("membership"));
+  });
+  const candidate = membership ?? credentials[0];
+  return (
+    stringOrUndefined(candidate?.["@id"] ?? candidate?.id) ??
+    stringOrUndefined(asRecord(candidate?.credential)?.id)
+  );
+}
+
+export function readCredentialStatusLabel(body: unknown) {
+  if (typeof body === "string") return body.trim().toLowerCase();
+  const record = asRecord(body);
+  return stringOrUndefined(record?.status ?? record?.label)?.toLowerCase();
+}
+
+/** True when a post-terminate data-plane probe shows access is blocked. */
+export function isDataPlaneAccessDenied(responseStatus: number | null, body: unknown) {
+  if (responseStatus !== null && responseStatus >= 400) return true;
+  const record = asRecord(body);
+  if (record?.denied === true) return true;
+  if (responseStatus === 204) return true;
+  return false;
+}
 
 export function managementUrl(baseUrl: string) {
   return servicePortUrl(baseUrl, "controlplane.", "8081");
@@ -150,6 +220,14 @@ export function buildTransferRequest(config: MvdConfig, agreementId: string, ass
     },
     protocol: DSP_PROTOCOL,
     transferType: "HttpData-PULL",
+  };
+}
+
+export function buildTerminateTransferRequest(reason = "Offboarding — revoke data access for this participant run") {
+  return {
+    "@context": { "@vocab": "https://w3id.org/edc/v0.0.1/ns/" },
+    "@type": "TerminateTransfer",
+    reason,
   };
 }
 

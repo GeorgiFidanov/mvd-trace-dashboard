@@ -292,10 +292,13 @@ function normalizeConfig(config: MvdConfig): MvdConfig {
     consumerDataPlaneUrl: "http://dp.consumer.localhost",
     consumerIdentityHubUrl: "http://ih.consumer.localhost/cs",
     providerIdentityHubUrl: "http://ih.provider.localhost/cs",
-    issuerUrl: "http://issuer.localhost/admin",
+    issuerUrl: "http://issuer.localhost/api/admin/v1alpha",
   };
 
   const normalized = { ...defaultConfig, ...config };
+  if (normalized.issuerUrl.endsWith("/admin") && !normalized.issuerUrl.includes("/api/admin/")) {
+    normalized.issuerUrl = normalized.issuerUrl.replace(/\/admin$/, "/api/admin/v1alpha");
+  }
   for (const [key, oldValue] of Object.entries(oldAliases) as [keyof MvdConfig, string][]) {
     if (normalized[key] === oldValue) {
       normalized[key] = defaultConfig[key] as never;
