@@ -181,8 +181,12 @@ that would have been called and mark events as mock.
 
 ## Documentation
 
+Project PDFs, markdown guides, and demo assets live under `docs/` and are linked from the **Architecture** page.
+
 - `docs/guides/how-this-codebase-runs.md`: beginner-friendly explanation of the TypeScript/Next.js codebase.
 - `docs/guides/validation-platform-redesign.md`: broader redesign and deployment plan.
+- `docs/pdfs/`: final project PDFs (EDC selection, MVD analysis, deployment report, use cases, and more).
+- `docs/misc/`: demo video and dashboard QR code.
 
 ## Commit And Repository Safety
 

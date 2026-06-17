@@ -4,11 +4,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
+import { getProjectDoc } from "@/lib/projectDocs";
 
-const guides = new Map([
-  ["how-this-codebase-runs.md", "How this codebase runs"],
-  ["validation-platform-redesign.md", "Validation platform redesign"],
-]);
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type MarkdownBlock =
   | { type: "heading"; depth: 1 | 2 | 3; text: string }
@@ -19,10 +18,10 @@ type MarkdownBlock =
 export default async function MarkdownDocPage({ params }: { params: Promise<{ file: string }> }) {
   const { file } = await params;
   const decoded = decodeURIComponent(file);
-  const title = guides.get(decoded);
-  if (!title) notFound();
+  const doc = getProjectDoc(decoded);
+  if (!doc || doc.kind !== "markdown") notFound();
 
-  const markdown = await readFile(path.join(process.cwd(), "docs", "guides", decoded), "utf8").catch(() => null);
+  const markdown = await readFile(path.join(process.cwd(), "docs", doc.relativePath), "utf8").catch(() => null);
   if (!markdown) notFound();
 
   return (
@@ -32,7 +31,7 @@ export default async function MarkdownDocPage({ params }: { params: Promise<{ fi
           <Link href="/architecture" className="text-sm font-semibold text-cyan-200 hover:text-cyan-100">
             Back to architecture and docs
           </Link>
-          <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight text-white">{title}</h1>
+          <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight text-white">{doc.title}</h1>
           <div className="mt-8 max-w-4xl space-y-5 text-slate-300">{renderMarkdown(markdown)}</div>
         </article>
       </div>
