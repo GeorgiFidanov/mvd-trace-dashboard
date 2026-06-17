@@ -15,11 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dataspace Use-Case Validation Platform",
   description: "Educational EDC MVD scenario validation dashboard by Pink Panther",
-  icons: {
-    icon: [{ url: "/pink.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/pink.svg" }],
-    shortcut: ["/pink.svg"],
-  },
 };
 
 export default function RootLayout({

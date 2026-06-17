@@ -155,10 +155,28 @@ function FlowCanvas({
   return (
     <svg className="h-full w-full" viewBox="0 0 100 100" role="img" aria-hidden>
       <defs>
-        <marker id={markerId} markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto">
+        <marker
+          id={markerId}
+          markerUnits="userSpaceOnUse"
+          viewBox="0 0 4 4"
+          markerWidth="4"
+          markerHeight="4"
+          refX="3.5"
+          refY="2"
+          orient="auto"
+        >
           <path d="M0,0 L4,2 L0,4 Z" fill="rgba(34,211,238,0.7)" />
         </marker>
-        <marker id={`${markerId}-red`} markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto">
+        <marker
+          id={`${markerId}-red`}
+          markerUnits="userSpaceOnUse"
+          viewBox="0 0 4 4"
+          markerWidth="4"
+          markerHeight="4"
+          refX="3.5"
+          refY="2"
+          orient="auto"
+        >
           <path d="M0,0 L4,2 L0,4 Z" fill="rgba(248,113,113,0.75)" />
         </marker>
         <filter id={`${markerId}-glow`}>
@@ -293,7 +311,7 @@ function FlowCanvas({
 }
 
 export function CoreDemoFlowViz({ activeStepId, states, assetLabel, consumerLabel, providerLabel }: Props) {
-  const markerId = useId().replace(/:/g, "");
+  const markerId = `core-flow-${useId().replace(/:/g, "")}`;
   const running = states[activeStepId] === "running";
   const done = states[activeStepId] === "success";
   const path = paths[activeStepId] ?? paths["core-onboard"];

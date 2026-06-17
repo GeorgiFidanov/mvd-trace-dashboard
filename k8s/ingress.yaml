@@ -5,8 +5,8 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
 spec:
+  ingressClassName: traefik
   rules:
-    - host: edc-validation-dashboard.example.educloud
       http:
         paths:
           - path: /
