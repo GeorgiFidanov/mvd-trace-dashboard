@@ -4,7 +4,7 @@ export function PinkPantherMark({ className = "h-12 w-12" }: { className?: strin
   return (
     <Image
       className={`rounded-2xl object-cover ${className}`}
-      src="/pink.svg"
+      src="/favicon.svg"
       alt="Pink Panther project mark"
       width={96}
       height={96}

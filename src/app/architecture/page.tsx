@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/AppShell";
-import { markdownHref, pdfHref } from "@/lib/projectDocs";
+import { availableDocSections, docHref } from "@/lib/projectDocs";
 import Link from "next/link";
 
 type ArchitectureComponent = {
@@ -8,15 +8,15 @@ type ArchitectureComponent = {
   linkLabel: string;
   group: string;
   route?: string;
-  pdf?: string;
+  docFile?: string;
 };
 
 const components: ArchitectureComponent[] = [
   {
     name: "Dashboard",
-    description: "Guided UI for scenario execution and education.",
-    route: "/scenario-wizard",
-    linkLabel: "Open Core Demo Playground",
+    description: "Guided UI for scenario execution and validation evidence.",
+    route: "/scenario-wizard?useCase=UC-CORE",
+    linkLabel: "Open Core Demo wizard",
     group: "Presentation layer",
   },
   {
@@ -43,7 +43,7 @@ const components: ArchitectureComponent[] = [
   {
     name: "Provider Control Plane",
     description: "Publishes assets, policies, contract offers, and DSP endpoints.",
-    pdf: "Minimum Viable Dataspace (MVD) Technical Analysis.pdf",
+    docFile: "Minimum Viable Dataspace (MVD) Technical Analysis Final.pdf",
     linkLabel: "MVD technical analysis (PDF)",
     group: "Provider participant",
   },
@@ -71,7 +71,7 @@ const components: ArchitectureComponent[] = [
   {
     name: "PostgreSQL",
     description: "Persistence for EDC runtime state in Kubernetes deployments.",
-    pdf: "Deployment and Testing Report_ Eclipse MVD.pdf",
+    docFile: "Deployment_and_Testing_Report__Eclipse_MVD_Final.pdf",
     linkLabel: "Deployment & testing report (PDF)",
     group: "Infrastructure",
   },
@@ -86,149 +86,21 @@ const components: ArchitectureComponent[] = [
 
 const componentGroups = ["Presentation layer", "Consumer participant", "Provider participant", "Trust & identity", "Infrastructure"];
 
-type DocEntry = { file: string; title: string; description: string };
-type DocSection = { title: string; subtitle: string; docs: DocEntry[]; kind: "markdown" | "pdf" };
-
-const documentationSections: DocSection[] = [
-  {
-    title: "Getting started",
-    subtitle: "What a dataspace is and how to read the project evidence",
-    kind: "pdf",
-    docs: [
-      {
-        file: "What is a Dataspace FIWARE & EDC.pdf",
-        title: "What is a Dataspace (FIWARE & EDC)",
-        description: "Business-friendly dataspace primer for FIWARE and EDC.",
-      },
-      {
-        file: "Reading_Guide_Dataspaces_Project.pdf",
-        title: "Reading guide",
-        description: "Suggested order for reading the project evidence.",
-      },
-    ],
-  },
-  {
-    title: "Architecture & platform choice",
-    subtitle: "Why EDC MVD, Gaia-X alignment, and how the dashboard fits in",
-    kind: "pdf",
-    docs: [
-      {
-        file: "Eclipse Dataspace Selection & Gaia-X Alignment.pdf",
-        title: "EDC selection & Gaia-X alignment",
-        description: "Why EDC was selected and how it relates to Gaia-X.",
-      },
-      {
-        file: "Dataspace Use-Case Validation Platform.pdf",
-        title: "Validation platform presentation",
-        description: "Presentation document for the validation dashboard itself.",
-      },
-    ],
-  },
-  {
-    title: "FIWARE track",
-    subtitle: "FIWARE dataspace background and migration context",
-    kind: "pdf",
-    docs: [
-      {
-        file: "Technical Documentation Fiware.pdf",
-        title: "FIWARE technical documentation",
-        description: "Technical FIWARE notes and reference material.",
-      },
-      {
-        file: "fiware-dataspace.pdf",
-        title: "FIWARE dataspace overview",
-        description: "FIWARE dataspace background material.",
-      },
-      {
-        file: "DataSpace_FIWARE_to_EDC_final.pptx.pdf",
-        title: "FIWARE to EDC direction",
-        description: "Slide deck covering the FIWARE to EDC MVD direction.",
-      },
-    ],
-  },
-  {
-    title: "EDC MVD technical depth",
-    subtitle: "Connector behaviour, use cases, and technical analysis",
-    kind: "pdf",
-    docs: [
-      {
-        file: "Minimum Viable Dataspace (MVD) Technical Analysis.pdf",
-        title: "MVD technical analysis",
-        description: "Technical analysis of the Eclipse MVD setup.",
-      },
-      {
-        file: "Update the use cases then to what they should be b....pdf.pdf",
-        title: "Use-case update notes",
-        description: "Notes on aligning use cases with MVD capabilities.",
-      },
-    ],
-  },
-  {
-    title: "Deployment & testing",
-    subtitle: "Running the stack in Kubernetes and validating it live",
-    kind: "pdf",
-    docs: [
-      {
-        file: "Deployment and Testing Report_ Eclipse MVD.pdf",
-        title: "Deployment & testing report",
-        description: "Deployment and testing notes for the running environment.",
-      },
-    ],
-  },
-  {
-    title: "Project planning & reflection",
-    subtitle: "Planning documents, next steps, and team retrospectives",
-    kind: "pdf",
-    docs: [
-      {
-        file: "Dataspace_Project_Plan.docx.pdf",
-        title: "Project plan",
-        description: "Project plan exported as PDF.",
-      },
-      {
-        file: "Dataspace_Whats_Next.docx.pdf",
-        title: "What's next",
-        description: "Next-step planning notes exported as PDF.",
-      },
-      {
-        file: "Project_Debriefing_Dataspace_Implementation.docx.pdf",
-        title: "Project debriefing",
-        description: "Project debriefing and implementation reflection.",
-      },
-      {
-        file: "Group Retrospectives.pdf",
-        title: "Group retrospectives",
-        description: "Project group reflection material.",
-      },
-    ],
-  },
-];
-
-const markdownGuides = [
-  {
-    file: "how-this-codebase-runs.md",
-    title: "How this codebase runs",
-    description: "Beginner-friendly guide to the TypeScript and Next.js dashboard internals.",
-  },
-  {
-    file: "validation-platform-redesign.md",
-    title: "Validation platform redesign",
-    description: "Architecture and redesign plan for the validation platform.",
-  },
-];
-
 function resolveComponentHref(component: ArchitectureComponent) {
   if (component.route?.startsWith("/docs/")) {
     const file = decodeURIComponent(component.route.replace("/docs/", ""));
-    return markdownHref(file);
+    return docHref(file);
   }
   if (component.route) return component.route;
-  if (component.pdf) return pdfHref(component.pdf);
+  if (component.docFile) return docHref(component.docFile);
   return null;
 }
 
-function resolveDocHref(file: string, kind: "markdown" | "pdf") {
-  return kind === "markdown" ? markdownHref(file) : pdfHref(file);
+function kindLabel(kind: string) {
+  if (kind === "markdown") return "Markdown";
+  if (kind === "video") return "Video";
+  if (kind === "image") return "Image";
+  return "PDF";
 }
 
 function ComponentCard({ component, href }: { component: ArchitectureComponent; href: string }) {
@@ -261,19 +133,11 @@ function CardBody({ component }: { component: ArchitectureComponent }) {
   );
 }
 
-export default function ArchitecturePage() {
-  const availableMarkdown = markdownGuides
-    .map((guide) => ({ ...guide, href: markdownHref(guide.file) }))
-    .filter((guide): guide is typeof guide & { href: string } => Boolean(guide.href));
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  const availableSections = documentationSections
-    .map((section) => ({
-      ...section,
-      docs: section.docs
-        .map((doc) => ({ ...doc, href: resolveDocHref(doc.file, section.kind) }))
-        .filter((doc): doc is typeof doc & { href: string } => Boolean(doc.href)),
-    }))
-    .filter((section) => section.docs.length > 0);
+export default function ArchitecturePage() {
+  const sections = availableDocSections();
 
   const availableComponents = components
     .map((component) => ({ component, href: resolveComponentHref(component) }))
@@ -284,7 +148,7 @@ export default function ArchitecturePage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header>
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Architecture</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">How the demonstrator connects to EDC</h1>
+          <h1 className="mt-2 text-3xl font-bold text-white">How the validation platform connects to EDC</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
             The dashboard stays outside the MVD runtime. It validates scenarios through public participant APIs and stores
             educational traces locally for replay and evaluation.
@@ -328,48 +192,45 @@ export default function ArchitecturePage() {
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-pink-200">Project Documentation</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Supporting documents grouped by topic</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-              Only documents that are available in this project are linked. Missing files are hidden rather than sending you to
-              a dead end.
+              Final PDFs, markdown guides, and demo assets from <code className="text-cyan-100">docs/</code>. Missing
+              files are hidden rather than sending you to a dead end.
             </p>
           </div>
 
-          {availableMarkdown.length > 0 ? (
-            <>
-              <h3 className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">Markdown guides</h3>
-              <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                {availableMarkdown.map((guide) => (
-                  <Link
-                    key={guide.file}
-                    href={guide.href}
-                    className="rounded-3xl border border-white/10 bg-slate-950/60 p-5 transition hover:-translate-y-1 hover:border-cyan-300/40 hover:bg-white/10"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Markdown · Codebase</p>
-                    <h3 className="mt-2 text-lg font-semibold text-white">{guide.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">{guide.description}</p>
-                  </Link>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {availableSections.map((section) => (
+          {sections.map((section) => (
             <div key={section.title} className="mt-8">
               <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-pink-200">{section.title}</h3>
               <p className="mt-1 text-sm text-slate-400">{section.subtitle}</p>
               <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                {section.docs.map((doc) => (
-                  <a
-                    key={doc.file}
-                    href={doc.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-3xl border border-white/10 bg-slate-950/60 p-5 transition hover:-translate-y-1 hover:border-pink-300/40 hover:bg-white/10"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-pink-200">PDF · {section.title}</p>
-                    <h4 className="mt-2 text-lg font-semibold text-white">{doc.title}</h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">{doc.description}</p>
-                  </a>
-                ))}
+                {section.docs.map((doc) => {
+                  const external = doc.kind !== "markdown";
+                  const className =
+                    "rounded-3xl border border-white/10 bg-slate-950/60 p-5 transition hover:-translate-y-1 hover:border-pink-300/40 hover:bg-white/10";
+
+                  const body = (
+                    <>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-pink-200">
+                        {kindLabel(doc.kind)} · {section.title}
+                      </p>
+                      <h4 className="mt-2 text-lg font-semibold text-white">{doc.title}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{doc.description}</p>
+                    </>
+                  );
+
+                  if (external) {
+                    return (
+                      <a key={doc.file} href={doc.href} target="_blank" rel="noreferrer" className={className}>
+                        {body}
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <Link key={doc.file} href={doc.href} className={className}>
+                      {body}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           ))}
