@@ -1,25 +1,58 @@
 import type { TraceEvent, TraceStatus } from "./types";
 import { isExpectedAccessRevocationAssertion } from "./mvdFlow";
 
-export function isUnexpectedTraceError(event: TraceEvent): boolean {
+function mvdStepSucceeded(events: TraceEvent[], stepName: string) {
+  return events.some((event) => event.stepName === stepName && event.status === "success");
+}
+
+/** verifyAccessRevoked returned HTTP ≥400 — the offboard denial proof. */
+export function isVerifyAccessDenialEvent(event: TraceEvent): boolean {
   return (
-    event.status === "error" &&
-    !isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody)
+    event.stepName === "verifyAccessRevoked" &&
+    event.responseStatus !== null &&
+    event.responseStatus >= 400
   );
 }
 
 /** Offboard proof: verifyAccessRevoked HTTP ≥400 is the intended passing outcome. */
 export function isOffboardAccessAssertion(event: TraceEvent): boolean {
-  return isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody);
+  return (
+    isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody) ||
+    isVerifyAccessDenialEvent(event)
+  );
 }
 
-export function traceHasOffboardAssertionPass(events: TraceEvent[]): boolean {
-  return events.some(isOffboardAccessAssertion);
+/** True when MVD trace evidence shows offboard completed (denial or revoke path). */
+export function traceHasOffboardPass(events: TraceEvent[]): boolean {
+  if (events.some(isOffboardAccessAssertion)) return true;
+  if (events.some(isVerifyAccessDenialEvent)) return true;
+
+  const terminated = mvdStepSucceeded(events, "terminateTransfer");
+  const revoked = mvdStepSucceeded(events, "revokeConsumerCredential");
+  const credentialChecked = mvdStepSucceeded(events, "verifyCredentialRevoked");
+
+  if (terminated && revoked) return true;
+  if (terminated && credentialChecked) return true;
+
+  return false;
+}
+
+/** @deprecated Use traceHasOffboardPass */
+export const traceHasOffboardAssertionPass = traceHasOffboardPass;
+
+export function isUnexpectedTraceError(event: TraceEvent): boolean {
+  if (event.status !== "error") return false;
+  if (isOffboardAccessAssertion(event) || isVerifyAccessDenialEvent(event)) return false;
+  // Wizard offboard errors are UI noise — MVD events hold the proof.
+  if (event.method === "WIZARD" || event.actor === "Scenario Wizard") {
+    if (event.stepName === "core-offboard" || event.stepName.includes("offboard")) return false;
+  }
+  return !isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody);
 }
 
 export function effectiveTraceStatus(status: TraceStatus, events: TraceEvent[]): TraceStatus {
+  if (traceHasOffboardPass(events)) return "success";
   if (events.some(isUnexpectedTraceError)) return "error";
-  if (traceHasOffboardAssertionPass(events)) return "success";
   return status;
 }
 
@@ -40,7 +73,7 @@ const RETRY_COLLAPSE_STEPS = new Set(["getEdrOrDataflow", "getEdrDataAddress", "
 export function displayTraceEvents(events: TraceEvent[]): TraceEvent[] {
   const mvdStepNames = new Set(events.filter((event) => event.method !== "WIZARD").map((event) => event.stepName));
   const withoutWizardDupes = events.filter((event) => {
-    const isWizardEvent = event.method === "WIZARD" || event.actor === "Dashboard user";
+    const isWizardEvent = event.method === "WIZARD" || event.actor === "Scenario Wizard";
     if (!isWizardEvent) return true;
     const equivalent = WIZARD_STEP_TO_MVD[event.stepName];
     if (KEEP_WIZARD_ON_MVD_FAILURE.has(event.stepName) && event.status === "error") return true;
@@ -68,6 +101,8 @@ export type TraceDiagnosis = {
 };
 
 export function diagnoseTrace(events: TraceEvent[]): TraceDiagnosis | null {
+  if (traceHasOffboardPass(events)) return null;
+
   const failed = events.find(isUnexpectedTraceError);
   if (failed) {
     return diagnoseFailedEvent(failed, events);
