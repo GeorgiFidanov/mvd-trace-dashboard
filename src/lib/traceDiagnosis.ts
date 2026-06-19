@@ -1,8 +1,32 @@
-import type { TraceEvent, TraceStatus } from "./types";
+import type { TraceEvent, TraceStatus, TraceWithEvents } from "./types";
 import { isExpectedAccessRevocationAssertion } from "./mvdFlow";
 
 function mvdStepSucceeded(events: TraceEvent[], stepName: string) {
   return events.some((event) => event.stepName === stepName && event.status === "success");
+}
+
+/** Stale wizard row from a browser fetch failure — not MVD proof. */
+function isWizardOffboardNoise(event: TraceEvent): boolean {
+  if (event.status !== "error") return false;
+  if (event.stepName !== "core-offboard" && !event.stepName.includes("offboard")) return false;
+  return event.method === "WIZARD" || event.actor === "Scenario Wizard";
+}
+
+function hasMvdOffboardEvidence(events: TraceEvent[]): boolean {
+  return (
+    mvdStepSucceeded(events, "terminateTransfer") ||
+    mvdStepSucceeded(events, "revokeConsumerCredential") ||
+    mvdStepSucceeded(events, "verifyCredentialRevoked") ||
+    events.some(isVerifyAccessDenialEvent) ||
+    events.some(isOffboardAccessAssertion)
+  );
+}
+
+function shouldHideWizardOffboardError(event: TraceEvent, events: TraceEvent[]): boolean {
+  if (!isWizardOffboardNoise(event)) return false;
+  if (traceHasOffboardPass(events)) return true;
+  if (hasMvdOffboardEvidence(events)) return true;
+  return mvdStepSucceeded(events, "fetchData") && mvdStepSucceeded(events, "startTransfer");
 }
 
 /** verifyAccessRevoked returned HTTP ≥400 — the offboard denial proof. */
@@ -35,6 +59,7 @@ export function traceHasOffboardPass(events: TraceEvent[]): boolean {
   if (terminated && revoked) return true;
   if (terminated && credentialChecked) return true;
   if (terminated && hadDataAccess) return true;
+  if (terminated && mvdStepSucceeded(events, "startTransfer")) return true;
 
   return false;
 }
@@ -45,17 +70,36 @@ export const traceHasOffboardAssertionPass = traceHasOffboardPass;
 export function isUnexpectedTraceError(event: TraceEvent): boolean {
   if (event.status !== "error") return false;
   if (isOffboardAccessAssertion(event) || isVerifyAccessDenialEvent(event)) return false;
-  // Wizard offboard errors are UI noise — MVD events hold the proof.
-  if (event.method === "WIZARD" || event.actor === "Scenario Wizard") {
-    if (event.stepName === "core-offboard" || event.stepName.includes("offboard")) return false;
-  }
+  if (isWizardOffboardNoise(event)) return false;
   return !isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody);
 }
 
 export function effectiveTraceStatus(status: TraceStatus, events: TraceEvent[]): TraceStatus {
   if (traceHasOffboardPass(events)) return "success";
   if (events.some(isUnexpectedTraceError)) return "error";
+
+  // DB may still say "error" from an old wizard fetch failure even though MVD steps succeeded.
+  if (status === "error" && events.some((event) => event.status === "error")) {
+    const errorEvents = events.filter((event) => event.status === "error");
+    const onlyIgnoredErrors = errorEvents.every(
+      (event) =>
+        isWizardOffboardNoise(event) ||
+        isOffboardAccessAssertion(event) ||
+        isVerifyAccessDenialEvent(event),
+    );
+    if (onlyIgnoredErrors && (hasMvdOffboardEvidence(events) || traceHasOffboardPass(events))) {
+      return "success";
+    }
+  }
+
   return status;
+}
+
+export function withEffectiveTraceStatus<T extends TraceWithEvents>(trace: T): T {
+  return {
+    ...trace,
+    status: effectiveTraceStatus(trace.status, trace.events ?? []),
+  };
 }
 
 const WIZARD_STEP_TO_MVD: Record<string, string> = {
@@ -89,18 +133,12 @@ export function displayTraceEvents(events: TraceEvent[]): TraceEvent[] {
     }
   });
 
-  return withoutWizardDupes.filter((event, index) => {
-    if (!RETRY_COLLAPSE_STEPS.has(event.stepName)) return true;
-    return lastRetryIndex.get(event.stepName) === index;
-  }).filter((event) => {
-    if (!traceHasOffboardPass(events)) return true;
-    // Drop stale wizard offboard errors — they come from client fetch noise, not MVD proof.
-    return !(
-      event.stepName === "core-offboard" &&
-      (event.method === "WIZARD" || event.actor === "Scenario Wizard") &&
-      event.status === "error"
-    );
-  });
+  return withoutWizardDupes
+    .filter((event, index) => {
+      if (!RETRY_COLLAPSE_STEPS.has(event.stepName)) return true;
+      return lastRetryIndex.get(event.stepName) === index;
+    })
+    .filter((event) => !shouldHideWizardOffboardError(event, events));
 }
 
 export type TraceDiagnosis = {

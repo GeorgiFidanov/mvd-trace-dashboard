@@ -184,7 +184,7 @@ export function DashboardClient({ view = "overview" }: { view?: View }) {
                     </span>
                   </div>
                 </Card>
-                <TraceDiagnosisPanel diagnosis={diagnoseTrace(visibleEvents)} />
+                <TraceDiagnosisPanel diagnosis={diagnoseTrace(trace.events ?? [])} />
                 <Card>
                   <CardTitle>Trace Timeline</CardTitle>
                   <div className="mt-4">

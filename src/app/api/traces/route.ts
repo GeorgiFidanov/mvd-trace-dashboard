@@ -1,5 +1,5 @@
 import { addTraceEvent, createTrace, deleteTrace, deleteTracesByStatus, getTraceWithEvents, listTracesWithEvents, updateTrace } from "@/lib/storage";
-import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
+import { effectiveTraceStatus, withEffectiveTraceStatus } from "@/lib/traceDiagnosis";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,9 +9,9 @@ export async function GET(request: Request) {
   const id = url.searchParams.get("id");
   if (id) {
     const trace = getTraceWithEvents(id);
-    return trace ? Response.json({ trace }) : Response.json({ error: "Trace not found" }, { status: 404 });
+    return trace ? Response.json({ trace: withEffectiveTraceStatus(trace) }) : Response.json({ error: "Trace not found" }, { status: 404 });
   }
-  return Response.json({ traces: listTracesWithEvents(50) });
+  return Response.json({ traces: listTracesWithEvents(50).map(withEffectiveTraceStatus) });
 }
 
 export async function POST(request: Request) {

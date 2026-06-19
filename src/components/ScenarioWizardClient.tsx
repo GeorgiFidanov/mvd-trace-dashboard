@@ -137,11 +137,15 @@ export function ScenarioWizardClient({
       return execution.selection;
     } catch (error) {
       if (step.action === "offboardParticipant") {
-        const traceId = currentSelection.traceId ?? (await ensureTrace(currentSelection)).traceId;
-        if (traceId && (await offboardPassInTrace(traceId))) {
-          const nextSelection = { ...currentSelection, traceId };
+        const nextSelection = await ensureTrace(currentSelection);
+        const traceId = nextSelection.traceId;
+        const passed = traceId ? await offboardPassInTrace(traceId) : false;
+        if (traceId) {
+          await finalizeTrace(traceId, passed ? "success" : "error");
+        }
+        if (passed && traceId) {
           setLastResult({
-            summary: "Offboard assertion passed — HTTP denial proves access was revoked.",
+            summary: "Offboard complete — MVD trace confirms transfer termination and access denial.",
             step: step.title,
             traceId,
           });
@@ -150,13 +154,23 @@ export function ScenarioWizardClient({
           setMessage(
             "Offboard complete (100%). verifyAccessRevoked HTTP ≥400 in the trace is expected — it proves the data plane denied access.",
           );
-          await recordWizardTraceEvent(traceId, step, "success", {
+          await safeRecordWizardTraceEvent(traceId, step, "success", {
             assertionPassed: true,
-            note: "verifyAccessRevoked HTTP denial counts as offboard success.",
+            note: "MVD offboard evidence in trace counts as success.",
           });
-          await finalizeTrace(traceId, "success");
           return nextSelection;
         }
+        setSelection(nextSelection);
+        setLastResult({
+          summary: "Offboard step did not finish — check MVD events in Advanced Diagnostics.",
+          step: step.title,
+          error: error instanceof Error ? error.message : String(error),
+          traceId,
+        });
+        setStates((current) => ({ ...current, [step.id]: "failed" }));
+        setMessage(error instanceof Error ? error.message : String(error));
+        if (throwOnError) throw error;
+        return null;
       }
       const failedSelection = await recordStepFailure(step, currentSelection, error);
       setSelection(failedSelection);
