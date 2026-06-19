@@ -381,6 +381,9 @@ export function ScenarioWizardClient({
         note:
           "Transfer terminated, membership VC revoked via IssuerService POST …/credentials/{id}/revoke, and data-plane denial confirmed.",
       };
+      if (nextSelection.traceId) {
+        await recordWizardTraceEvent(nextSelection.traceId, step, "success", summary);
+      }
       return { result: summary, selection: nextSelection };
     }
 
@@ -595,7 +598,27 @@ export function ScenarioWizardClient({
       );
     }
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? `Request failed: ${response.status}`);
+    if (action === "verifyAccessRevoked" && isMvdStepResult(data)) {
+      const result = data as MvdStepResult & { accessRevoked?: boolean };
+      if (
+        result.accessRevoked ||
+        isExpectedAccessRevocationAssertion(
+          result.event.stepName,
+          result.event.responseStatus,
+          result.data ?? result.event.responseBody,
+        )
+      ) {
+        return { ...result, accessRevoked: true } as T;
+      }
+    }
+    if (!response.ok) {
+      const detail = typeof data.error === "string" ? data.error : `Request failed: ${response.status}`;
+      throw new Error(
+        detail === "fetch failed"
+          ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
+          : detail,
+      );
+    }
     if (isMvdStepResult(data) && data.event.status === "error") {
       if (action === "verifyAccessRevoked") {
         if ((data as { accessRevoked?: boolean }).accessRevoked) return data as T;

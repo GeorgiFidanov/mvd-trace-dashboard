@@ -120,6 +120,7 @@ export function isDataPlaneAccessDenied(responseStatus: number | null, body: unk
   if (responseStatus !== null && responseStatus >= 400) return true;
   const record = asRecord(body);
   if (record?.denied === true) return true;
+  if (record?.unreachable === true) return true;
   if (responseStatus === 204) return true;
   return false;
 }
