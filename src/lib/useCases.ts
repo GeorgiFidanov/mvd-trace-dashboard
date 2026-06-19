@@ -187,7 +187,7 @@ export const wizardSteps: WizardStepDefinition[] = [
     playbookStage: 5,
     explanation:
       "Terminate the active transfer, revoke the consumer membership credential in IssuerService (IdentityHub trust layer), then confirm the data plane denies a follow-up fetch.",
-    successCriteria: "Transfer is terminated, credential status is revocation, and data fetch is denied.",
+    successCriteria: "Transfer terminated, credential revoked, and data-plane denial confirmed (expected HTTP ≥400 counts as pass).",
     outcomeSummary: "Access and trust are revoked — transfer terminated, membership VC revoked, data plane rejected the retry.",
   },
   {

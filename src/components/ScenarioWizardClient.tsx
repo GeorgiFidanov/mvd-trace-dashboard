@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { coreDemoStageForWizardStep, isCoreDemoUseCase } from "@/lib/coreDemo";
-import { extractCatalogOffers, isTransferReadyState, readTransferState, type CatalogOfferOption } from "@/lib/mvdFlow";
+import { extractCatalogOffers, isTransferReadyState, isExpectedAccessRevocationAssertion, readTransferState, type CatalogOfferOption } from "@/lib/mvdFlow";
 import { roleLabels, useCases, wizardSteps, type WizardStepDefinition, type WizardStepStatus } from "@/lib/useCases";
 import type { HealthCheckResult, MvdStepResult } from "@/lib/types";
 import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
@@ -69,7 +69,9 @@ export function ScenarioWizardClient({
   );
   const selectedUseCaseDetails = useCases.find((useCase) => useCase.id === selectedUseCase) ?? useCases[0];
   const activeStep = visibleSteps.find((step) => step.id === activeStepId) ?? visibleSteps[0];
-  const progress = Math.round((visibleSteps.filter((step) => states[step.id] === "success").length / visibleSteps.length) * 100);
+  const successCount = visibleSteps.filter((step) => states[step.id] === "success").length;
+  const progress = Math.round((successCount / visibleSteps.length) * 100);
+  const allStepsComplete = successCount === visibleSteps.length;
   const coreDemoMode = isCoreDemoUseCase(selectedUseCase);
 
   useEffect(() => {
@@ -111,6 +113,11 @@ export function ScenarioWizardClient({
     }
     if (localSelection.traceId) {
       await finalizeTrace(localSelection.traceId, completed ? "success" : "error");
+    }
+    if (completed && coreDemoMode) {
+      setMessage(
+        "All five Core Demo steps passed (100%). The final data-plane denial was expected — it confirms access control is enforced.",
+      );
     }
   }
 
@@ -572,16 +579,35 @@ export function ScenarioWizardClient({
   }
 
   async function callMvd<T = unknown>(action: string, payload: Record<string, unknown> = {}) {
-    const response = await fetch("/api/mvd", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, ...payload }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/mvd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        detail === "fetch failed"
+          ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
+          : detail,
+      );
+    }
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? `Request failed: ${response.status}`);
     if (isMvdStepResult(data) && data.event.status === "error") {
-      if (action === "verifyAccessRevoked" && (data as { accessRevoked?: boolean }).accessRevoked) {
-        return data as T;
+      if (action === "verifyAccessRevoked") {
+        if ((data as { accessRevoked?: boolean }).accessRevoked) return data as T;
+        if (
+          isExpectedAccessRevocationAssertion(
+            data.event.stepName,
+            data.event.responseStatus,
+            data.data ?? data.event.responseBody,
+          )
+        ) {
+          return { ...(data as object), accessRevoked: true } as T;
+        }
       }
       throw new Error(data.event.errorMessage ?? "MVD step failed");
     }
@@ -685,10 +711,15 @@ export function ScenarioWizardClient({
                 ))}
             </optgroup>
           </select>
-          <div className="text-sm font-semibold text-cyan-100">{progress}% complete</div>
+          <div className="text-sm font-semibold text-cyan-100">
+            {allStepsComplete ? "100% complete · all assertions passed" : `${progress}% complete`}
+          </div>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-900">
-          <div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${progress}%` }} />
+          <div
+            className={`h-full rounded-full transition-all ${allStepsComplete ? "bg-emerald-400" : "bg-cyan-300"}`}
+            style={{ width: `${progress}%` }}
+          />
         </div>
         <div className="mt-5 rounded-[2rem] border border-pink-300/30 bg-gradient-to-br from-pink-300/15 to-cyan-300/10 p-5 shadow-xl shadow-slate-950/20">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -698,10 +729,14 @@ export function ScenarioWizardClient({
                 {selectedUseCaseDetails.id} · {selectedUseCaseDetails.shortTitle}
               </h2>
             </div>
-            <StatusBadge status={selectedUseCaseDetails.status} />
+            <StatusBadge status={allStepsComplete ? "success" : isRunning ? "running" : selectedUseCaseDetails.status} />
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-300">{selectedUseCaseDetails.goal}</p>
-          <p className="mt-2 text-sm text-slate-400">Success: {selectedUseCaseDetails.successCriteria}</p>
+          <p className="mt-2 text-sm text-slate-400">
+            {allStepsComplete
+              ? "All steps passed — including the expected access denial on offboard (assertion-style success)."
+              : `Success: ${selectedUseCaseDetails.successCriteria}`}
+          </p>
         </div>
         {coreDemoMode ? (
           <div className="mt-5 grid gap-4 rounded-[2rem] border border-pink-300/25 bg-pink-300/10 p-5 lg:grid-cols-3">
@@ -729,7 +764,9 @@ export function ScenarioWizardClient({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Plain-language scenario result</p>
           <p className="mt-2 text-sm leading-6 text-slate-200">
             {message ??
-              "The consumer asks for data access. The provider checks identity and policy. If the checks pass, access is granted and the data is exchanged through a controlled path."}
+              (allStepsComplete && coreDemoMode
+                ? "Core Demo complete. The last step deliberately probes denied access — that HTTP failure is the proof that offboarding worked."
+                : "The consumer asks for data access. The provider checks identity and policy. If the checks pass, access is granted and the data is exchanged through a controlled path.")}
           </p>
         </div>
       </header>

@@ -18,11 +18,13 @@ import {
   readCredentialStatusLabel,
   readTransferState,
   isDataPlaneAccessDenied,
+  isExpectedAccessRevocationAssertion,
+  expectedAccessRevocationMessage,
 } from "./mvdFlow";
 import { mockCatalog, mockDataflow, mockFinalData, mockIssuerCredentials, mockMembershipCredentialId, mockNegotiation, mockOpenDataflows, mockTransfer } from "./mockMvd";
 import { issuerAdminHeaders } from "./issuerAuth";
 import { redactHeaders, redactJson } from "./redaction";
-import { addTraceEvent, createTrace, getTrace, updateTrace } from "./storage";
+import { addTraceEvent, createTrace, getTrace, getTraceEvents, updateTrace } from "./storage";
 import type { HealthCheckResult, MvdConfig, MvdStepResult, Trace, TraceEventStatus } from "./types";
 
 type StepCall = {
@@ -446,6 +448,13 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
   let status: TraceEventStatus = "success";
   let errorMessage: string | null = null;
 
+  if (useMock && call.stepName === "getTransfer" && call.traceId) {
+    const terminated = getTraceEvents(call.traceId).some(
+      (event) => event.stepName === "terminateTransfer" && event.status === "success",
+    );
+    responseBody = mockTransfer(terminated ? "TERMINATED" : "STARTED");
+  }
+
   if (!useMock) {
     try {
       const response = await fetch(call.url, {
@@ -474,6 +483,10 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
           errorMessage = `Transfer state is ${transferState} — not ready for data retrieval yet.`;
         }
       }
+      if (isExpectedAccessRevocationAssertion(call.stepName, responseStatus, responseBody)) {
+        status = "success";
+        errorMessage = expectedAccessRevocationMessage(responseStatus);
+      }
     } catch (error) {
       if (call.mockMode === "off") {
         throw error;
@@ -487,8 +500,9 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
 
   if (useMock && call.stepName === "verifyAccessRevoked") {
     responseStatus = 403;
-    status = "error";
-    errorMessage = "Mock data plane denied access after termination.";
+    responseBody = { denied: true };
+    status = "success";
+    errorMessage = expectedAccessRevocationMessage(responseStatus);
   }
 
   const completed = Date.now();

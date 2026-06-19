@@ -58,11 +58,11 @@ export function mockNegotiation() {
   };
 }
 
-export function mockTransfer() {
+export function mockTransfer(state: "STARTED" | "TERMINATED" = "STARTED") {
   return {
     "@id": mockIds.transferId,
     "@type": "TransferProcess",
-    state: "STARTED",
+    state,
   };
 }
 
@@ -96,6 +96,32 @@ export function mockFinalData() {
       source: "mock",
     },
   ];
+}
+
+export function mockHealthChecks(): Record<string, import("./types").HealthCheckResult> {
+  const entry = (service: string): import("./types").HealthCheckResult => ({
+    ok: true,
+    state: "success",
+    status: 200,
+    durationMs: 1,
+    url: "mock://demo",
+    checkedUrl: "mock://demo",
+    service,
+    explanation: "Mock mode: all services treated as reachable for the Core Demo playground.",
+    detail: "No live cluster probe — demo/mock mode only.",
+    dedicatedHealthEndpoint: true,
+  });
+  return {
+    consumerControlPlane: entry("Consumer Control Plane"),
+    consumerDataPlane: entry("Consumer Data Plane"),
+    consumerIdentityHub: entry("Consumer IdentityHub"),
+    providerControlPlane: entry("Provider Control Plane"),
+    providerDataPlane: entry("Provider Data Plane"),
+    providerIdentityHub: entry("Provider IdentityHub"),
+    providerVault: entry("Provider Vault"),
+    issuer: entry("Issuer"),
+    traefik: entry("Traefik"),
+  };
 }
 
 export const mockMembershipCredentialId = "mock-membership-credential-1";

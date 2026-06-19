@@ -127,11 +127,12 @@ function shortenLine(from: NodeDef, to: NodeDef, inset = 7) {
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
+  const round = (value: number) => Math.round(value * 1000) / 1000;
   return {
-    x1: from.x + ux * inset,
-    y1: from.y + uy * inset,
-    x2: to.x - ux * inset,
-    y2: to.y - uy * inset,
+    x1: round(from.x + ux * inset),
+    y1: round(from.y + uy * inset),
+    x2: round(to.x - ux * inset),
+    y2: round(to.y - uy * inset),
   };
 }
 

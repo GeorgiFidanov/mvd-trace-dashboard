@@ -14,6 +14,7 @@ import {
   verifyAccessRevoked,
   verifyCredentialRevoked,
 } from "@/lib/mvdClient";
+import { mockHealthChecks } from "@/lib/mockMvd";
 import { getConfig } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
 
     switch (body.action) {
       case "health":
+        if (config.mockMode === "on") {
+          return Response.json(mockHealthChecks());
+        }
         return Response.json({
           consumerControlPlane: await healthCheck(config.consumerControlPlaneUrl, { service: "Consumer Control Plane", warningStatuses: routeReachableStatuses }),
           consumerDataPlane: await healthCheck(config.consumerDataPlaneUrl, { service: "Consumer Data Plane", warningStatuses: routeReachableStatuses }),

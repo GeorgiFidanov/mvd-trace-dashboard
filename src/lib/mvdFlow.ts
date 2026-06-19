@@ -124,6 +124,17 @@ export function isDataPlaneAccessDenied(responseStatus: number | null, body: unk
   return false;
 }
 
+/** Offboard assertion: HTTP denial on verifyAccessRevoked is the expected passing outcome. */
+export function isExpectedAccessRevocationAssertion(stepName: string, responseStatus: number | null, body: unknown) {
+  return stepName === "verifyAccessRevoked" && isDataPlaneAccessDenied(responseStatus, body);
+}
+
+export function expectedAccessRevocationMessage(responseStatus: number | null) {
+  return responseStatus !== null && responseStatus >= 400
+    ? `Assertion passed: data plane denied access (HTTP ${responseStatus}).`
+    : "Assertion passed: data plane denied access.";
+}
+
 export function managementUrl(baseUrl: string) {
   return servicePortUrl(baseUrl, "controlplane.", "8081");
 }

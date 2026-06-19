@@ -29,10 +29,10 @@ export const PROJECT_DOCS: ProjectDoc[] = [
     kind: "pdf",
   },
   {
-    file: "Reading Guide – Dataspaces Project - Final.pdf",
+    file: "Reading_Guide_Dataspaces_Project_Final.pdf",
     title: "Reading guide (final)",
     description: "Suggested order for reading the project evidence.",
-    relativePath: "pdfs/Reading Guide – Dataspaces Project - Final.pdf",
+    relativePath: "pdfs/Reading_Guide_Dataspaces_Project_Final.pdf",
     kind: "pdf",
   },
   {
@@ -175,7 +175,7 @@ export const DOC_SECTIONS: DocSection[] = [
     docs: PROJECT_DOCS.filter((d) =>
       [
         "What is a Dataspace FIWARE & EDC.pdf",
-        "Reading Guide – Dataspaces Project - Final.pdf",
+        "Reading_Guide_Dataspaces_Project_Final.pdf",
         "Starter Kit for Data Space Designers Version 1.5.pdf",
       ].includes(d.file),
     ),
@@ -210,7 +210,6 @@ export const DOC_SECTIONS: DocSection[] = [
       [
         "Minimum Viable Dataspace (MVD) Technical Analysis Final.pdf",
         "Use_Cases_EDC.pdf",
-        "edc-mvd-bpmn-generation-prompt.md",
       ].includes(d.file),
     ),
   },

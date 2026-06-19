@@ -304,5 +304,8 @@ function normalizeConfig(config: MvdConfig): MvdConfig {
       normalized[key] = defaultConfig[key] as never;
     }
   }
+  if (normalized.mockMode === "auto") {
+    normalized.mockMode = "on";
+  }
   return normalized;
 }
