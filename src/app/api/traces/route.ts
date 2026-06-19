@@ -1,4 +1,5 @@
 import { addTraceEvent, createTrace, deleteTrace, deleteTracesByStatus, getTraceWithEvents, listTracesWithEvents, updateTrace } from "@/lib/storage";
+import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,11 +32,9 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "valid status is required" }, { status: 400 });
   }
   let status = body.status;
-  if (status === "success") {
-    const trace = getTraceWithEvents(body.id);
-    if (trace?.events.some((event) => event.status === "error")) {
-      status = "error";
-    }
+  const trace = getTraceWithEvents(body.id);
+  if (trace) {
+    status = effectiveTraceStatus(status, trace.events);
   }
   return Response.json({ trace: updateTrace(body.id, { status }) });
 }

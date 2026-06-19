@@ -1,11 +1,15 @@
 import type { TraceEvent, TraceStatus } from "./types";
 import { isExpectedAccessRevocationAssertion } from "./mvdFlow";
 
-export function effectiveTraceStatus(status: TraceStatus, events: TraceEvent[]): TraceStatus {
-  const hasUnexpectedError = events.some(
-    (event) => event.status === "error" && !isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody),
+export function isUnexpectedTraceError(event: TraceEvent): boolean {
+  return (
+    event.status === "error" &&
+    !isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody)
   );
-  if (hasUnexpectedError) return "error";
+}
+
+export function effectiveTraceStatus(status: TraceStatus, events: TraceEvent[]): TraceStatus {
+  if (events.some(isUnexpectedTraceError)) return "error";
   return status;
 }
 
@@ -54,11 +58,8 @@ export type TraceDiagnosis = {
 };
 
 export function diagnoseTrace(events: TraceEvent[]): TraceDiagnosis | null {
-  const failed = events.find((event) => event.status === "error");
+  const failed = events.find(isUnexpectedTraceError);
   if (failed) {
-    if (isExpectedAccessRevocationAssertion(failed.stepName, failed.responseStatus, failed.responseBody)) {
-      return null;
-    }
     return diagnoseFailedEvent(failed, events);
   }
 

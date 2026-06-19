@@ -146,7 +146,7 @@ export async function getTransfer(config: MvdConfig, args: { traceId?: string; u
   });
   result.trace = updateTrace(result.trace.id, {
     transferProcessId: args.transferProcessId,
-    status: readTransferState(result.data) === "TERMINATED" ? "error" : "running",
+    status: "running",
   });
   return result;
 }
@@ -474,7 +474,15 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
       }
       if (call.stepName === "getTransfer") {
         const transferState = readTransferState(responseBody);
-        if (transferState === "TERMINATED") {
+        const afterTerminate =
+          call.traceId &&
+          getTraceEvents(call.traceId).some(
+            (event) => event.stepName === "terminateTransfer" && event.status === "success",
+          );
+        if (transferState === "TERMINATED" && afterTerminate) {
+          status = "success";
+          errorMessage = "Transfer reached TERMINATED — expected during offboard.";
+        } else if (transferState === "TERMINATED") {
           status = "pending";
           errorMessage =
             "Transfer state is TERMINATED. The HTTP call succeeded, but the transfer process has already ended.";
