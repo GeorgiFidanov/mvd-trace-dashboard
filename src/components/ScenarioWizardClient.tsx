@@ -566,15 +566,16 @@ export function ScenarioWizardClient({
     const nextSelection = await ensureTrace(currentSelection);
     const traceId = nextSelection.traceId;
     if (traceId) {
-      const message = error instanceof Error ? error.message : String(error);
-      const mvdStepFailed = Boolean(
-        step.action &&
-          step.action !== "health" &&
-          step.action !== "offboardParticipant",
-      );
-      const offboardPassed = traceId ? await offboardPassInTrace(traceId) : false;
-      // MVD-backed steps record HTTP failures themselves, but fetchData can fail after only 204 responses.
-      if ((!mvdStepFailed || step.action === "fetchData" || step.action === "accessUseData") && !offboardPassed) {
+      const offboardPassed = await offboardPassInTrace(traceId);
+      const skipWizardError =
+        step.action === "offboardParticipant" ||
+        step.action === "health" ||
+        (step.action !== undefined &&
+          step.action !== "fetchData" &&
+          step.action !== "accessUseData");
+
+      if (!skipWizardError && !offboardPassed) {
+        const message = error instanceof Error ? error.message : String(error);
         const now = new Date().toISOString();
         await fetch("/api/traces", {
           method: "PUT",
@@ -593,11 +594,7 @@ export function ScenarioWizardClient({
           }),
         });
       }
-      if (offboardPassed) {
-        await finalizeTrace(traceId, "success");
-      } else {
-        await finalizeTrace(traceId, "error");
-      }
+      await finalizeTrace(traceId, offboardPassed ? "success" : "error");
     }
     return nextSelection;
   }

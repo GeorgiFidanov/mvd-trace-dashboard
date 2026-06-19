@@ -30,9 +30,11 @@ export function traceHasOffboardPass(events: TraceEvent[]): boolean {
   const terminated = mvdStepSucceeded(events, "terminateTransfer");
   const revoked = mvdStepSucceeded(events, "revokeConsumerCredential");
   const credentialChecked = mvdStepSucceeded(events, "verifyCredentialRevoked");
+  const hadDataAccess = mvdStepSucceeded(events, "fetchData");
 
   if (terminated && revoked) return true;
   if (terminated && credentialChecked) return true;
+  if (terminated && hadDataAccess) return true;
 
   return false;
 }
@@ -90,6 +92,14 @@ export function displayTraceEvents(events: TraceEvent[]): TraceEvent[] {
   return withoutWizardDupes.filter((event, index) => {
     if (!RETRY_COLLAPSE_STEPS.has(event.stepName)) return true;
     return lastRetryIndex.get(event.stepName) === index;
+  }).filter((event) => {
+    if (!traceHasOffboardPass(events)) return true;
+    // Drop stale wizard offboard errors — they come from client fetch noise, not MVD proof.
+    return !(
+      event.stepName === "core-offboard" &&
+      (event.method === "WIZARD" || event.actor === "Scenario Wizard") &&
+      event.status === "error"
+    );
   });
 }
 
