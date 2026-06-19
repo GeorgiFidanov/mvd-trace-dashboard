@@ -8,8 +8,18 @@ export function isUnexpectedTraceError(event: TraceEvent): boolean {
   );
 }
 
+/** Offboard proof: verifyAccessRevoked HTTP ≥400 is the intended passing outcome. */
+export function isOffboardAccessAssertion(event: TraceEvent): boolean {
+  return isExpectedAccessRevocationAssertion(event.stepName, event.responseStatus, event.responseBody);
+}
+
+export function traceHasOffboardAssertionPass(events: TraceEvent[]): boolean {
+  return events.some(isOffboardAccessAssertion);
+}
+
 export function effectiveTraceStatus(status: TraceStatus, events: TraceEvent[]): TraceStatus {
   if (events.some(isUnexpectedTraceError)) return "error";
+  if (traceHasOffboardAssertionPass(events)) return "success";
   return status;
 }
 

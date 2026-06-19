@@ -5,7 +5,7 @@ import { coreDemoStageForWizardStep, isCoreDemoUseCase } from "@/lib/coreDemo";
 import { extractCatalogOffers, isTransferReadyState, isExpectedAccessRevocationAssertion, readTransferState, type CatalogOfferOption } from "@/lib/mvdFlow";
 import { roleLabels, useCases, wizardSteps, type WizardStepDefinition, type WizardStepStatus } from "@/lib/useCases";
 import type { HealthCheckResult, MvdStepResult } from "@/lib/types";
-import { effectiveTraceStatus } from "@/lib/traceDiagnosis";
+import { effectiveTraceStatus, traceHasOffboardAssertionPass } from "@/lib/traceDiagnosis";
 import {
   blockingOfflineHealthServices,
   formatHealthServiceLabel,
@@ -136,6 +136,28 @@ export function ScenarioWizardClient({
       setShowTechnicalLog(false);
       return execution.selection;
     } catch (error) {
+      if (step.action === "offboardParticipant") {
+        const traceId = currentSelection.traceId ?? (await ensureTrace(currentSelection)).traceId;
+        if (traceId && (await offboardAssertionInTrace(traceId))) {
+          const nextSelection = { ...currentSelection, traceId };
+          setLastResult({
+            summary: "Offboard assertion passed — HTTP denial proves access was revoked.",
+            step: step.title,
+            traceId,
+          });
+          setSelection(nextSelection);
+          setStates((current) => ({ ...current, [step.id]: "success" }));
+          setMessage(
+            "Offboard complete (100%). verifyAccessRevoked HTTP ≥400 in the trace is expected — it proves the data plane denied access.",
+          );
+          await recordWizardTraceEvent(traceId, step, "success", {
+            assertionPassed: true,
+            note: "verifyAccessRevoked HTTP denial counts as offboard success.",
+          });
+          await finalizeTrace(traceId, "success");
+          return nextSelection;
+        }
+      }
       const failedSelection = await recordStepFailure(step, currentSelection, error);
       setSelection(failedSelection);
       setLastResult({
@@ -564,9 +586,20 @@ export function ScenarioWizardClient({
           }),
         });
       }
-      await finalizeTrace(traceId, "error");
+      if (step.action === "offboardParticipant" && (await offboardAssertionInTrace(traceId))) {
+        await finalizeTrace(traceId, "success");
+      } else {
+        await finalizeTrace(traceId, "error");
+      }
     }
     return nextSelection;
+  }
+
+  async function offboardAssertionInTrace(traceId: string) {
+    const response = await fetch(`/api/traces?id=${encodeURIComponent(traceId)}`, { cache: "no-store" });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return traceHasOffboardAssertionPass(data.trace?.events ?? []);
   }
 
   async function finalizeTrace(traceId: string, status: "success" | "error") {

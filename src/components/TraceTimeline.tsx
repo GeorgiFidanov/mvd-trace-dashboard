@@ -1,7 +1,8 @@
 "use client";
 
 import type { TraceEvent } from "@/lib/types";
-import { type TraceDiagnosis } from "@/lib/traceDiagnosis";
+import type { TraceDiagnosis } from "@/lib/traceDiagnosis";
+import { isOffboardAccessAssertion } from "@/lib/traceDiagnosis";
 import { JsonBlock } from "./JsonBlock";
 
 export function TraceTimeline({ events }: { events: TraceEvent[] }) {
@@ -22,7 +23,7 @@ export function TraceTimeline({ events }: { events: TraceEvent[] }) {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <span className={badgeClass(event.status)}>{eventLabel(event)}</span>
+                <span className={badgeClass(event)}>{eventLabel(event)}</span>
                 <span className={statusCodeClass(event)}>{event.responseStatus ?? "no status"}</span>
                 <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-200">{event.durationMs ?? 0} ms</span>
               </div>
@@ -33,7 +34,19 @@ export function TraceTimeline({ events }: { events: TraceEvent[] }) {
             <JsonBlock title="Response" value={{ status: event.responseStatus, body: event.responseBody, ids: event.extractedIds }} />
           </div>
           {event.errorMessage ? (
-            <p className={`mt-3 text-sm ${event.status === "pending" ? "text-amber-200" : "text-red-300"}`}>{event.errorMessage}</p>
+            <p
+              className={`mt-3 text-sm ${
+                isOffboardAccessAssertion(event)
+                  ? "text-emerald-200"
+                  : event.status === "pending"
+                    ? "text-amber-200"
+                    : "text-red-300"
+              }`}
+            >
+              {isOffboardAccessAssertion(event)
+                ? `Offboard assertion passed — HTTP ${event.responseStatus ?? "denial"} proves access was revoked.`
+                : event.errorMessage}
+            </p>
           ) : null}
         </details>
       ))}
@@ -111,19 +124,24 @@ export function SequenceView({ events }: { events: TraceEvent[] }) {
   );
 }
 
-function badgeClass(status: TraceEvent["status"]) {
-  if (status === "success") return "rounded-full bg-emerald-400/15 px-2 py-1 font-medium text-emerald-100";
-  if (status === "error") return "rounded-full bg-red-400/15 px-2 py-1 font-medium text-red-100";
+function badgeClass(event: TraceEvent) {
+  if (isOffboardAccessAssertion(event)) {
+    return "rounded-full bg-emerald-400/15 px-2 py-1 font-medium text-emerald-100";
+  }
+  if (event.status === "success") return "rounded-full bg-emerald-400/15 px-2 py-1 font-medium text-emerald-100";
+  if (event.status === "error") return "rounded-full bg-red-400/15 px-2 py-1 font-medium text-red-100";
   return "rounded-full bg-amber-400/15 px-2 py-1 font-medium text-amber-100";
 }
 
 function eventLabel(event: TraceEvent) {
+  if (isOffboardAccessAssertion(event)) return "assertion passed";
   if (event.status === "pending") return "waiting";
   return event.status;
 }
 
 function statusCodeClass(event: TraceEvent) {
   const base = "rounded-full px-2 py-1 ";
+  if (isOffboardAccessAssertion(event)) return `${base}bg-emerald-400/15 text-emerald-100`;
   if (event.status === "pending") return `${base}bg-amber-400/15 text-amber-100`;
   if (event.status === "error") return `${base}bg-red-400/15 text-red-100`;
   return `${base}bg-slate-800 text-slate-200`;

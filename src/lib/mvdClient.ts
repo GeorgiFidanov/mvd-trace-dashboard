@@ -18,8 +18,6 @@ import {
   readCredentialStatusLabel,
   readTransferState,
   isDataPlaneAccessDenied,
-  isExpectedAccessRevocationAssertion,
-  expectedAccessRevocationMessage,
 } from "./mvdFlow";
 import { mockCatalog, mockDataflow, mockFinalData, mockIssuerCredentials, mockMembershipCredentialId, mockNegotiation, mockOpenDataflows, mockTransfer } from "./mockMvd";
 import { issuerAdminHeaders } from "./issuerAuth";
@@ -491,37 +489,22 @@ async function callMvd(call: StepCall): Promise<MvdStepResult> {
           errorMessage = `Transfer state is ${transferState} — not ready for data retrieval yet.`;
         }
       }
-      if (isExpectedAccessRevocationAssertion(call.stepName, responseStatus, responseBody)) {
-        status = "success";
-        errorMessage = expectedAccessRevocationMessage(responseStatus);
-      }
     } catch (error) {
-      if (call.stepName === "verifyAccessRevoked") {
-        status = "success";
-        responseStatus = null;
-        responseBody = {
-          denied: true,
-          unreachable: true,
-          reason: error instanceof Error ? error.message : String(error),
-        };
-        errorMessage =
-          "Assertion passed: data plane unreachable after offboard (connection failed — treated as access denied).";
-      } else if (call.mockMode === "off") {
+      if (call.mockMode === "off") {
         throw error;
-      } else {
-        status = "error";
-        responseStatus = null;
-        responseBody = { fallback: "mock", reason: error instanceof Error ? error.message : String(error), data: call.mockResponse };
-        errorMessage = `MVD service unavailable, used mock fallback: ${error instanceof Error ? error.message : String(error)}`;
       }
+      status = "error";
+      responseStatus = null;
+      responseBody = { fallback: "mock", reason: error instanceof Error ? error.message : String(error), data: call.mockResponse };
+      errorMessage = `MVD service unavailable, used mock fallback: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 
   if (useMock && call.stepName === "verifyAccessRevoked") {
     responseStatus = 403;
     responseBody = { denied: true };
-    status = "success";
-    errorMessage = expectedAccessRevocationMessage(responseStatus);
+    status = "error";
+    errorMessage = "MVD API returned 403";
   }
 
   const completed = Date.now();
