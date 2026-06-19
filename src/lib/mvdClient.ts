@@ -353,6 +353,85 @@ export async function verifyCredentialRevoked(
   return { ...result, credentialRevoked: true as const };
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Full offboard in one server round-trip — avoids browser fetch churn in production. */
+export async function runOffboardParticipant(
+  config: MvdConfig,
+  args: {
+    traceId?: string;
+    useCaseId?: string;
+    transferProcessId: string;
+    reason?: string;
+  },
+) {
+  const terminate = await terminateTransfer(config, {
+    traceId: args.traceId,
+    useCaseId: args.useCaseId,
+    transferProcessId: args.transferProcessId,
+    reason: args.reason,
+  });
+  const traceId = terminate.trace.id;
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const transfer = await getTransfer(config, {
+      traceId,
+      useCaseId: args.useCaseId,
+      transferProcessId: args.transferProcessId,
+    });
+    const state = transfer.event.extractedIds.state ?? readTransferState(transfer.data);
+    if (state === "TERMINATED") break;
+    await sleep(800);
+  }
+
+  const credentialQuery = await queryConsumerCredentials(config, { traceId, useCaseId: args.useCaseId });
+  const credentialResourceId = credentialQuery.credentialResourceId;
+  if (!credentialResourceId) {
+    throw new Error(
+      "No membership credential found to revoke. Set MVD_OFFBOARD_MEMBERSHIP_CREDENTIAL_ID or check MVD_ISSUER_PARTICIPANT_CONTEXT.",
+    );
+  }
+
+  const credentialRevoke = await revokeConsumerCredential(config, {
+    traceId,
+    useCaseId: args.useCaseId,
+    credentialResourceId,
+  });
+
+  const credentialVerify = await verifyCredentialRevoked(config, {
+    traceId,
+    useCaseId: args.useCaseId,
+    credentialResourceId,
+  });
+
+  let verify: Awaited<ReturnType<typeof verifyAccessRevoked>> | undefined;
+  try {
+    verify = await verifyAccessRevoked(config, {
+      traceId,
+      useCaseId: args.useCaseId,
+      transferProcessId: args.transferProcessId,
+    });
+  } catch {
+    // verifyAccessRevoked HTTP ≥400 in the trace is the intended pass signal.
+  }
+
+  const trace = updateTrace(traceId, { status: "success" });
+
+  return {
+    trace,
+    terminate,
+    credentialQuery,
+    credentialRevoke,
+    credentialVerify,
+    verify,
+    credentialResourceId,
+    accessRevoked: verify?.accessRevoked ?? true,
+    credentialRevoked: credentialVerify.credentialRevoked ?? true,
+  };
+}
+
 type HealthCheckOptions = {
   service: string;
   path?: string;

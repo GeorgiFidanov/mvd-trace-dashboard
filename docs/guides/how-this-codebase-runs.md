@@ -72,7 +72,8 @@ URLs that the browser should not call directly.
 The `src/lib` folder contains plain TypeScript modules. They are not pages. They are reusable logic.
 
 - `src/lib/mvdFlow.ts`: endpoint paths, default config, request body builders, and ID extraction.
-- `src/lib/mvdClient.ts`: MVD HTTP calls, IssuerService OAuth, health checks, optional mock mode, and trace recording.
+- `src/lib/mvdClient.ts`: MVD HTTP calls, IssuerService OAuth, health checks, composite offboard flow (`runOffboardParticipant`), optional mock mode, and trace recording.
+- `src/lib/traceDiagnosis.ts`: offboard pass detection, effective trace status for Execution History / Advanced Diagnostics, and filtering of duplicate or stale wizard events.
 - `src/lib/issuerAuth.ts`: Keycloak token for IssuerService admin API (offboarding).
 - `src/lib/storage.ts`: SQLite setup and database functions.
 - `src/lib/redaction.ts`: removes or masks sensitive values before storing traces.
@@ -191,6 +192,7 @@ Example actions:
 - `revokeConsumerCredential`
 - `verifyCredentialRevoked`
 - `verifyAccessRevoked`
+- `offboardParticipant` — composite action; runs the full Core Demo offboard sequence server-side via `runOffboardParticipant()` in one `/api/mvd` request (terminate, poll transfer, revoke credential, verify revocation, probe data-plane denial).
 
 This pattern is called a dispatcher. One route receives many related actions and dispatches them to specific functions.
 
@@ -433,6 +435,37 @@ The final data fetch happens later:
 6. It stores the final response in the trace.
 7. The UI shows that the consumer received the protected data.
 
+## Core Demo Offboard And Trace Status
+
+Core Demo step 5 (Offboard / Revoke Access) is special in two ways.
+
+### One server round-trip
+
+Most wizard steps send one action per click. Offboard used to chain many browser `fetch("/api/mvd")` calls (terminate,
+poll transfer, IssuerService revoke, denial probe). That was fragile in production when a single fetch dropped.
+
+Now the wizard sends **`action: "offboardParticipant"`** once. `runOffboardParticipant()` in `src/lib/mvdClient.ts` runs
+the full sequence on the server and records each MVD step in SQLite as before.
+
+### Expected denial = success
+
+The final probe (`verifyAccessRevoked`) **should** return HTTP ≥403 when access was revoked. That event stays in the
+trace as `status: "error"` with the real status code — it is evidence, not a failure.
+
+`src/lib/traceDiagnosis.ts` decides what the UI shows:
+
+- `traceHasOffboardPass(events)` — true when MVD evidence shows offboard completed (denial probe, terminate + revoke, or
+  terminate + prior data access).
+- `effectiveTraceStatus(status, events)` — returns `success` when offboard passed, even if the raw trace row in SQLite
+  still says `error` from an old wizard fetch failure.
+- `displayTraceEvents(events)` — hides stale `core-offboard` wizard errors when MVD proof exists.
+
+Execution History, Advanced Diagnostics, and `GET /api/traces` use these helpers. Loading traces can also **sync** the
+stored status when MVD evidence overrides a stale `error` value.
+
+The scenario wizard marks step 5 green and shows **100% complete** when offboard pass is detected, including recovery
+after a client error if MVD steps already succeeded.
+
 ## Where To Start Reading Code
 
 If you feel lost, read in this order:
@@ -442,9 +475,10 @@ If you feel lost, read in this order:
 3. `src/components/ProcessVisualizationClient.tsx`: client component with local state.
 4. `src/components/ScenarioWizardClient.tsx`: main interactive scenario runner.
 5. `src/app/api/mvd/route.ts`: server API dispatcher.
-6. `src/lib/mvdClient.ts`: actual MVD call logic.
+6. `src/lib/mvdClient.ts`: actual MVD call logic (including `runOffboardParticipant`).
 7. `src/lib/mvdFlow.ts`: request builders and ID extraction.
-8. `src/lib/storage.ts`: SQLite persistence.
+8. `src/lib/traceDiagnosis.ts`: offboard pass rules and effective trace status.
+9. `src/lib/storage.ts`: SQLite persistence.
 
 ## Common Confusions
 
@@ -495,6 +529,7 @@ Client components handle clicks and local UI state.
 API routes receive browser requests.
 Library functions call MVD and SQLite.
 Types keep the data shapes honest.
+Trace diagnosis interprets MVD evidence for status and UI.
 Traces preserve what happened.
 Advanced Diagnostics shows the technical truth.
 ```

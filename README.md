@@ -23,7 +23,9 @@ APIs:
 2. Create / publish data offer (catalog request).
 3. Request data access (contract negotiation).
 4. Access & use data (transfer + data-plane fetch).
-5. Offboard / revoke access (terminate transfer, IssuerService credential revoke, verify denial).
+5. Offboard / revoke access — one server-side `offboardParticipant` action (terminate transfer, IssuerService credential
+   revoke, verify data-plane denial). **Success includes an expected HTTP ≥403 on the denial probe**; that response stays
+   in the trace as proof while the UI marks the run successful.
 
 Open the scenario wizard at `/scenario-wizard?useCase=UC-CORE`. Technical validation use cases (UC-E1 … UC-E6) live under
 `/use-cases`.
@@ -46,7 +48,8 @@ Important files:
 - `src/components/DeploymentStatusClient.tsx`: service reachability dashboard.
 - `src/app/api/mvd/route.ts`: API route used by the browser to run MVD actions.
 - `src/app/api/ready/route.ts`: readiness and health endpoint for the dashboard.
-- `src/lib/mvdClient.ts`: outbound MVD HTTP calls, IssuerService OAuth, health checks, and trace recording.
+- `src/lib/mvdClient.ts`: outbound MVD HTTP calls, IssuerService OAuth, health checks, composite offboard flow, and trace recording.
+- `src/lib/traceDiagnosis.ts`: offboard pass detection, effective trace status, and diagnostics UI filtering.
 - `src/lib/issuerAuth.ts`: Keycloak client-credentials token for IssuerService admin API.
 - `src/lib/mvdFlow.ts`: endpoint paths, default config, request payload builders, and ID extraction.
 - `src/lib/storage.ts`: creates and reads the local SQLite database.
@@ -55,11 +58,15 @@ Important files:
 The normal EDC execution flow is:
 
 1. Open the Scenario Wizard from Use Cases and run a guided use-case scenario.
-2. Each wizard step calls `/api/mvd` with an action such as `requestCatalog`.
+2. Each wizard step calls `/api/mvd` with an action such as `requestCatalog` (Core Demo step 5 uses the composite
+   `offboardParticipant` action — one browser request, full offboard sequence on the server).
 3. `src/app/api/mvd/route.ts` loads config from `src/lib/storage.ts`.
-4. `src/lib/mvdClient.ts` builds and sends the real MVD HTTP request.
+4. `src/lib/mvdClient.ts` builds and sends the real MVD HTTP request(s).
 5. The response is parsed, redacted, and stored as a trace event in `data/mvd-traces.sqlite`.
-6. Advanced Diagnostics shows the timeline, sequence view, and a single root-cause summary when a step fails.
+6. `src/lib/traceDiagnosis.ts` derives display status from MVD evidence (for example offboard pass when transfer
+   terminated and access was denied). Execution History and Advanced Diagnostics use this; stale wizard fetch errors
+   do not override a successful MVD offboard.
+7. Advanced Diagnostics shows the timeline, sequence view, and a single root-cause summary when a step fails.
 
 Manual step controls remain available on the legacy EDC dashboard views for ad-hoc API experiments.
 
@@ -174,7 +181,7 @@ that would have been called and mark events as mock.
 - Plain-language result summaries with technical logs hidden behind toggles.
 - Settings page for service URLs and credentials.
 - Deployment status page with reachable/warning/offline health classification.
-- Execution History for saved scenario runs.
+- Execution History for saved scenario runs (status reflects MVD evidence, not stale wizard noise).
 - Advanced Diagnostics for trace timeline, sequence view, and root-cause analysis (read-only; scenarios are run from the wizard).
 - SQLite-backed traces and trace events.
 - Redacted headers and payload display.
@@ -218,6 +225,8 @@ Use `npm run build` when you want to verify a production Next.js build.
 - Traefik shows `404` at `/`: Traefik may still be reachable; use a hostname route or check Deployment Status.
 - `502 Unable to obtain credentials` / missing Vault alias (for example `consumer-participant-sts-client-secret`): MVD is reachable but the consumer connector cannot read STS secrets. Re-run `identityhub-seed` and confirm Vault seed jobs completed (`k8s/consumer/application/identityhub-seed.yaml` in MinimumViableDataspace).
 - Offboarding fails on IssuerService: confirm `MVD_ISSUER_URL` uses `…/api/admin/v1alpha` on port `10013`, Keycloak is reachable, and `MVD_ISSUER_PARTICIPANT_CONTEXT=issuer`.
+- Core Demo offboard shows **Failed** / **error** but MVD steps (`terminateTransfer`, `verifyAccessRevoked` ≥403) look correct: refresh Execution History or Advanced Diagnostics — trace status is recomputed from MVD events. Re-run step 5 after deploy if an old trace still has a bogus `core-offboard` wizard row from a dropped browser fetch.
+- `Could not reach the dashboard API` on offboard: step 5 now uses one long-lived `/api/mvd` call instead of many browser round-trips; confirm the dashboard pod/process stays up for up to ~2 minutes during offboard.
 - Traces show `mock-transfer-1` or `0 ms` on every step: **mock mode is on** in Settings — set `MVD_MOCK_MODE=off` for real calls.
 - Missing offer, negotiation, agreement, or transfer IDs: inspect the latest trace in Advanced Diagnostics.
 - Hydration warnings after code changes: refresh the page so Turbopack serves the latest client bundle.

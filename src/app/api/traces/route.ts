@@ -1,6 +1,13 @@
 import { addTraceEvent, createTrace, deleteTrace, deleteTracesByStatus, getTraceWithEvents, listTracesWithEvents, updateTrace } from "@/lib/storage";
 import { effectiveTraceStatus, withEffectiveTraceStatus } from "@/lib/traceDiagnosis";
 
+function syncTraceStatus(traceId: string) {
+  const trace = getTraceWithEvents(traceId);
+  if (!trace) return null;
+  const status = effectiveTraceStatus(trace.status, trace.events);
+  return status !== trace.status ? updateTrace(traceId, { status }) : trace;
+}
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -9,9 +16,18 @@ export async function GET(request: Request) {
   const id = url.searchParams.get("id");
   if (id) {
     const trace = getTraceWithEvents(id);
-    return trace ? Response.json({ trace: withEffectiveTraceStatus(trace) }) : Response.json({ error: "Trace not found" }, { status: 404 });
+    if (!trace) return Response.json({ error: "Trace not found" }, { status: 404 });
+    syncTraceStatus(id);
+    const healed = getTraceWithEvents(id)!;
+    return Response.json({ trace: withEffectiveTraceStatus(healed) });
   }
-  return Response.json({ traces: listTracesWithEvents(50).map(withEffectiveTraceStatus) });
+  return Response.json({
+    traces: listTracesWithEvents(50).map((trace) => {
+      syncTraceStatus(trace.id);
+      const healed = getTraceWithEvents(trace.id)!;
+      return withEffectiveTraceStatus(healed);
+    }),
+  });
 }
 
 export async function POST(request: Request) {
@@ -67,6 +83,7 @@ export async function PUT(request: Request) {
     completedAt,
     durationMs: Date.parse(completedAt) - Date.parse(startedAt),
   });
+  syncTraceStatus(body.traceId);
   return Response.json({ event });
 }
 

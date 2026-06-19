@@ -155,6 +155,7 @@ export function ExecutionHistoryClient({ initialUseCase = "all" }: { initialUseC
 
 function inferUseCaseId(events: TraceEvent[]) {
   const steps = new Set(events.map((event) => event.stepName));
+  if (steps.has("core-onboard") || steps.has("core-offboard")) return "UC-CORE";
   if (steps.has("interoperability-findings")) return "UC-E6";
   if (steps.has("identity-verification")) return "UC-E2";
   if (steps.has("fetchData")) return "UC-E5";

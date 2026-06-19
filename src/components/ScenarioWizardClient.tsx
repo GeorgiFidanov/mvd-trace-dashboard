@@ -104,7 +104,13 @@ export function ScenarioWizardClient({
     let localSelection: Selection = {};
     let completed = true;
     for (const step of visibleSteps) {
-      const nextSelection = await runStep(step, localSelection, false);
+      let nextSelection = await runStep(step, localSelection, false);
+      if (!nextSelection && step.action === "offboardParticipant" && localSelection.traceId) {
+        if (await offboardPassInTrace(localSelection.traceId)) {
+          setStates((current) => ({ ...current, [step.id]: "success" }));
+          nextSelection = localSelection;
+        }
+      }
       if (!nextSelection) {
         completed = false;
         break;
@@ -112,6 +118,14 @@ export function ScenarioWizardClient({
       localSelection = nextSelection;
     }
     if (localSelection.traceId) {
+      const passed = await offboardPassInTrace(localSelection.traceId);
+      if (passed) {
+        const offboardStep = visibleSteps.find((step) => step.action === "offboardParticipant");
+        if (offboardStep) {
+          setStates((current) => ({ ...current, [offboardStep.id]: "success" }));
+        }
+        completed = true;
+      }
       await finalizeTrace(localSelection.traceId, completed ? "success" : "error");
     }
     if (completed && coreDemoMode) {
@@ -350,74 +364,28 @@ export function ScenarioWizardClient({
         throw new Error("Complete step 4 — Access & Use Data — before offboarding so a transfer exists to terminate.");
       }
       const nextSelection = await ensureTrace(currentSelection);
-      const traceId = nextSelection.traceId;
-      setMessage("Sending terminateTransfer to the consumer control plane (MVD management API)…");
-      const terminate = await callMvd<MvdStepResult>("terminateTransfer", {
-        traceId,
+      setMessage(
+        "Running offboard on the server (terminate → revoke credential → confirm denial). This can take up to a minute…",
+      );
+      type OffboardResult = {
+        trace: MvdStepResult["trace"];
+        terminate: MvdStepResult;
+        credentialQuery: MvdStepResult & { credentialResourceId?: string };
+        credentialRevoke: MvdStepResult;
+        credentialVerify: MvdStepResult & { credentialRevoked?: boolean };
+        verify?: MvdStepResult & { accessRevoked?: boolean };
+        credentialResourceId: string;
+        accessRevoked: boolean;
+        credentialRevoked: boolean;
+      };
+      const offboard = await callMvd<OffboardResult>("offboardParticipant", {
+        traceId: nextSelection.traceId,
         useCaseId: selectedUseCase,
         transferProcessId: currentSelection.transferProcessId,
         reason: `Offboarding — ${playgroundLabels.consumerLabel}`,
       });
-
-      setMessage("Polling transfer state until TERMINATED…");
-      for (let attempt = 0; attempt < 15; attempt += 1) {
-        const transfer = await callMvd<MvdStepResult>("getTransfer", {
-          traceId,
-          useCaseId: selectedUseCase,
-          transferProcessId: currentSelection.transferProcessId,
-        });
-        const state = readTransferStateFromResult(transfer);
-        if (state === "TERMINATED") break;
-        await delay(800);
-      }
-
-      setMessage("Querying IssuerService for the consumer membership credential…");
-      const credentialQuery = await callMvd<MvdStepResult & { credentialResourceId?: string }>("queryConsumerCredentials", {
-        traceId,
-        useCaseId: selectedUseCase,
-      });
-      const credentialResourceId = credentialQuery.credentialResourceId;
-      if (!credentialResourceId) {
-        throw new Error(
-          "No membership credential found to revoke. Set MVD_OFFBOARD_MEMBERSHIP_CREDENTIAL_ID or check MVD_ISSUER_PARTICIPANT_CONTEXT.",
-        );
-      }
-
-      setMessage("Revoking membership credential via IssuerService admin API (IdentityHub trust layer)…");
-      const credentialRevoke = await callMvd<MvdStepResult>("revokeConsumerCredential", {
-        traceId,
-        useCaseId: selectedUseCase,
-        credentialResourceId,
-      });
-
-      setMessage("Confirming credential status is revocation…");
-      const credentialVerify = await callMvd<MvdStepResult & { credentialRevoked?: boolean }>("verifyCredentialRevoked", {
-        traceId,
-        useCaseId: selectedUseCase,
-        credentialResourceId,
-      });
-
-      setMessage("Retrying data access without a token — access should be denied…");
-      let verify: (MvdStepResult & { accessRevoked?: boolean }) | undefined;
-      try {
-        verify = await callMvd<MvdStepResult & { accessRevoked?: boolean }>("verifyAccessRevoked", {
-          traceId,
-          useCaseId: selectedUseCase,
-          transferProcessId: currentSelection.transferProcessId,
-        });
-      } catch {
-        // Denial probe may throw in the wizard client; HTTP ≥400 in the trace still counts as pass.
-      }
-
       const summary = {
-        terminate,
-        credentialQuery,
-        credentialRevoke,
-        credentialVerify,
-        verify,
-        credentialResourceId,
-        accessRevoked: verify?.accessRevoked ?? true,
-        credentialRevoked: credentialVerify.credentialRevoked ?? true,
+        ...offboard,
         playground: playgroundLabels,
         note:
           "Transfer terminated, membership VC revoked, and data-plane denial confirmed (verifyAccessRevoked HTTP ≥400 in trace = pass).",
@@ -425,8 +393,8 @@ export function ScenarioWizardClient({
       if (nextSelection.traceId) {
         await safeRecordWizardTraceEvent(nextSelection.traceId, step, "success", summary);
       }
-      await finalizeTrace(traceId!, "success");
-      return { result: summary, selection: nextSelection };
+      await finalizeTrace(offboard.trace.id, "success");
+      return { result: summary, selection: { ...nextSelection, traceId: offboard.trace.id } };
     }
 
     if (step.action === "startContractNegotiation") {
@@ -647,15 +615,35 @@ export function ScenarioWizardClient({
   }
 
   async function callMvd<T = unknown>(action: string, payload: Record<string, unknown> = {}) {
-    let response: Response;
-    try {
-      response = await fetch("/api/mvd", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...payload }),
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+    const maxAttempts = action === "offboardParticipant" ? 2 : 4;
+    let response: Response | undefined;
+    let lastFetchError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        response = await fetch("/api/mvd", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...payload }),
+          signal: action === "offboardParticipant" ? AbortSignal.timeout(120_000) : undefined,
+        });
+        break;
+      } catch (error) {
+        lastFetchError = error;
+        const detail = error instanceof Error ? error.message : String(error);
+        const retriable = detail === "fetch failed" || /failed to fetch|network|timeout/i.test(detail);
+        if (retriable && attempt < maxAttempts - 1) {
+          await delay(600 * (attempt + 1));
+          continue;
+        }
+        throw new Error(
+          retriable
+            ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
+            : detail,
+        );
+      }
+    }
+    if (!response) {
+      const detail = lastFetchError instanceof Error ? lastFetchError.message : String(lastFetchError);
       throw new Error(
         detail === "fetch failed"
           ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
@@ -685,7 +673,7 @@ export function ScenarioWizardClient({
       );
     }
     if (isMvdStepResult(data) && data.event.status === "error") {
-      if (action === "verifyAccessRevoked") {
+      if (action === "verifyAccessRevoked" || action === "offboardParticipant") {
         if ((data as { accessRevoked?: boolean }).accessRevoked) return data as T;
         if (
           isExpectedAccessRevocationAssertion(
@@ -697,6 +685,7 @@ export function ScenarioWizardClient({
           return { ...(data as object), accessRevoked: true } as T;
         }
       }
+      if (action === "offboardParticipant") return data as T;
       throw new Error(data.event.errorMessage ?? "MVD step failed");
     }
     return data as T;

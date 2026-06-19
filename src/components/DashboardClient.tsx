@@ -482,6 +482,7 @@ function traceUseCaseLabel(trace: Pick<TraceWithEvents, "useCaseId" | "events">)
 
 function inferUseCase(events: TraceWithEvents["events"]) {
   const steps = new Set(events.map((event) => event.stepName));
+  if (steps.has("core-onboard") || steps.has("core-offboard")) return "UC-CORE Core Demo";
   if (steps.has("interoperability-findings")) return "UC-E6 Interoperability Findings";
   if (steps.has("identity-verification")) return "UC-E2 Identity & Trust";
   if (steps.has("fetchData")) return "UC-E5 End-to-End Scenario";

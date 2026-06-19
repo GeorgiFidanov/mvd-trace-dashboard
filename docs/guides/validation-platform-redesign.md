@@ -8,8 +8,9 @@ The target architecture has three layers:
 
 - Experience layer: Overview, Use Cases, Scenario Wizard, Execution History, Architecture, Deployment Status, Advanced
   Diagnostics, and Settings.
-- Validation layer: scenario definitions, wizard state, use-case success criteria, history mapping, and outcome
-  summaries.
+- Validation layer: scenario definitions, wizard state, use-case success criteria, history mapping, outcome
+  summaries, and trace outcome interpretation (`traceDiagnosis.ts` — e.g. Core Demo offboard pass when MVD shows
+  termination and expected access denial).
 - EDC integration layer: Next.js dashboard API routes, MVD client helpers, trace recording, redaction, SQLite storage, health, and
   readiness checks.
 
@@ -45,8 +46,9 @@ src/
     DashboardClient.tsx              # Technical diagnostics/settings utility
   lib/
     useCases.ts                      # Use-case and wizard definitions
-    mvdClient.ts                     # MVD HTTP execution and tracing
+    mvdClient.ts                     # MVD HTTP execution, composite offboard, tracing
     mvdFlow.ts                       # Endpoint paths, payloads, ID extraction
+    traceDiagnosis.ts                # Effective trace status and offboard pass rules
     storage.ts                       # SQLite traces/settings
     redaction.ts                     # Secret masking
 k8s/
@@ -62,7 +64,7 @@ k8s/
 - Overview: explains the platform and shows all use-case cards.
 - Use Cases: detailed UC-E1 through UC-E6 validation cards with success criteria and run/result actions.
 - Scenario Wizard: guided process view inspired by the Dataspace Scenario Wizard.
-- Execution History: timestamp, use case, status, duration, environment, and trace ID.
+- Execution History: timestamp, use case, effective status (from MVD evidence), duration, environment, and trace ID.
 - Architecture: visual explanation of dashboard, dashboard API, EDC participant services, IdentityHub, Vault, PostgreSQL, and
   Traefik.
 - Deployment Status: Kubernetes-facing service health and readiness.

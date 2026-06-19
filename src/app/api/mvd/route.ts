@@ -13,6 +13,7 @@ import {
   revokeConsumerCredential,
   verifyAccessRevoked,
   verifyCredentialRevoked,
+  runOffboardParticipant,
 } from "@/lib/mvdClient";
 import { mockHealthChecks } from "@/lib/mockMvd";
 import { getConfig } from "@/lib/storage";
@@ -165,6 +166,15 @@ export async function POST(request: Request) {
             traceId: body.traceId,
             useCaseId: body.useCaseId,
             credentialResourceId: required(body.credentialResourceId, "credentialResourceId"),
+          }),
+        );
+      case "offboardParticipant":
+        return Response.json(
+          await runOffboardParticipant(config, {
+            traceId: body.traceId,
+            useCaseId: body.useCaseId,
+            transferProcessId: required(body.transferProcessId, "transferProcessId"),
+            reason: typeof body.reason === "string" ? body.reason : undefined,
           }),
         );
       default:
