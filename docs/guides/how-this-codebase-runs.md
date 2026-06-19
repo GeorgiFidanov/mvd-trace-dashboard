@@ -177,6 +177,8 @@ It does this:
 4. Calls the matching helper function from `src/lib/mvdClient.ts`.
 5. Returns JSON to the browser.
 
+The route exports `maxDuration = 300` so long offboard runs are not cut off by the Next.js execution limit.
+
 Example actions:
 
 - `health`
@@ -445,7 +447,24 @@ Most wizard steps send one action per click. Offboard used to chain many browser
 poll transfer, IssuerService revoke, denial probe). That was fragile in production when a single fetch dropped.
 
 Now the wizard sends **`action: "offboardParticipant"`** once. `runOffboardParticipant()` in `src/lib/mvdClient.ts` runs
-the full sequence on the server and records each MVD step in SQLite as before.
+the full sequence on the server and records each MVD step in SQLite as before. The `/api/mvd` route sets
+`maxDuration = 300` so the platform allows long offboard requests.
+
+### Production fetch recovery
+
+In production the browser can lose the HTTP response even when the server completed offboard (Traefik/proxy timeout,
+connection reset, tab navigation). Symptoms:
+
+- Wizard message: `Could not reach the dashboard API`
+- A stale WIZARD `core-offboard` row with `"selection"` in the request (older builds only — current code does not write this)
+- MVD steps such as `terminateTransfer` and `getTransfer` TERMINATED **after** that row in the timeline
+
+Recovery behaviour in `ScenarioWizardClient.tsx`:
+
+- **`isOffboardStep()`** — treats `core-offboard` by step id, not only by action name.
+- **`offboardPassInTrace(traceId, poll)`** — polls `GET /api/traces` for several seconds after a failure.
+- **`callMvd("offboardParticipant")`** — on fetch error, checks the trace and returns success when MVD proof exists.
+- **`recordStepFailure()`** — never records a WIZARD error for offboard; delegates to trace-based finalization.
 
 ### Expected denial = success
 
@@ -460,8 +479,9 @@ trace as `status: "error"` with the real status code — it is evidence, not a f
   still says `error` from an old wizard fetch failure.
 - `displayTraceEvents(events)` — hides stale `core-offboard` wizard errors when MVD proof exists.
 
-Execution History, Advanced Diagnostics, and `GET /api/traces` use these helpers. Loading traces can also **sync** the
-stored status when MVD evidence overrides a stale `error` value.
+Execution History, Advanced Diagnostics, and `GET /api/traces` use these helpers. Loading traces runs **`syncTraceStatus`**
+so the stored SQLite status catches up when MVD evidence overrides a stale `error` value. Adding trace events via
+`PUT /api/traces` triggers the same sync.
 
 The scenario wizard marks step 5 green and shows **100% complete** when offboard pass is detected, including recovery
 after a client error if MVD steps already succeeded.
@@ -506,6 +526,13 @@ MVD track.
 Mock mode is **off by default**. Set `MVD_MOCK_MODE=on` only when you want to click through the UI without a running MVD
 cluster. With mock mode off, failed calls (for example catalog `502` when Vault secrets are missing) appear immediately in
 traces — that is the intended validation behaviour.
+
+### Why does offboard say "Could not reach the dashboard API" but MVD steps look fine?
+
+The offboard sequence runs on the server inside one `/api/mvd` request. If the browser or ingress drops the response,
+the wizard may show a client error while SQLite already contains successful MVD events. Refresh Advanced Diagnostics or
+wait for trace polling — status and step 5 should recover when `traceHasOffboardPass()` is true. For repeated cases in
+Kubernetes, raise the proxy read timeout in front of the dashboard.
 
 ## Useful Commands
 

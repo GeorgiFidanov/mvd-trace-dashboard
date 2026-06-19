@@ -20,6 +20,8 @@ import { getConfig } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/** Offboard polls transfer + IssuerService — allow long requests through platform timeouts. */
+export const maxDuration = 300;
 const routeReachableStatuses = [404];
 
 export async function POST(request: Request) {

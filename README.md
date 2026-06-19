@@ -46,7 +46,7 @@ Important files:
 - `src/components/ScenarioWizardClient.tsx`: guided EDC scenario runner.
 - `src/components/ProcessVisualizationClient.tsx`: stakeholder process view and local custom process cards.
 - `src/components/DeploymentStatusClient.tsx`: service reachability dashboard.
-- `src/app/api/mvd/route.ts`: API route used by the browser to run MVD actions.
+- `src/app/api/mvd/route.ts`: API route used by the browser to run MVD actions (`maxDuration = 300` for long offboard runs).
 - `src/app/api/ready/route.ts`: readiness and health endpoint for the dashboard.
 - `src/lib/mvdClient.ts`: outbound MVD HTTP calls, IssuerService OAuth, health checks, composite offboard flow, and trace recording.
 - `src/lib/traceDiagnosis.ts`: offboard pass detection, effective trace status, and diagnostics UI filtering.
@@ -65,8 +65,12 @@ The normal EDC execution flow is:
 5. The response is parsed, redacted, and stored as a trace event in `data/mvd-traces.sqlite`.
 6. `src/lib/traceDiagnosis.ts` derives display status from MVD evidence (for example offboard pass when transfer
    terminated and access was denied). Execution History and Advanced Diagnostics use this; stale wizard fetch errors
-   do not override a successful MVD offboard.
-7. Advanced Diagnostics shows the timeline, sequence view, and a single root-cause summary when a step fails.
+   do not override a successful MVD offboard. `GET /api/traces` can **sync** stored status when MVD evidence overrides a
+   stale `error` row.
+7. If the browser loses the offboard HTTP response (proxy timeout, tab abort), the wizard **polls the trace** for MVD
+   proof and can still mark step 5 green and finalize success when `terminateTransfer` and related steps succeeded on
+   the server.
+8. Advanced Diagnostics shows the timeline, sequence view, and a single root-cause summary when a step fails.
 
 Manual step controls remain available on the legacy EDC dashboard views for ad-hoc API experiments.
 
@@ -225,8 +229,8 @@ Use `npm run build` when you want to verify a production Next.js build.
 - Traefik shows `404` at `/`: Traefik may still be reachable; use a hostname route or check Deployment Status.
 - `502 Unable to obtain credentials` / missing Vault alias (for example `consumer-participant-sts-client-secret`): MVD is reachable but the consumer connector cannot read STS secrets. Re-run `identityhub-seed` and confirm Vault seed jobs completed (`k8s/consumer/application/identityhub-seed.yaml` in MinimumViableDataspace).
 - Offboarding fails on IssuerService: confirm `MVD_ISSUER_URL` uses `…/api/admin/v1alpha` on port `10013`, Keycloak is reachable, and `MVD_ISSUER_PARTICIPANT_CONTEXT=issuer`.
-- Core Demo offboard shows **Failed** / **error** but MVD steps (`terminateTransfer`, `verifyAccessRevoked` ≥403) look correct: refresh Execution History or Advanced Diagnostics — trace status is recomputed from MVD events. Re-run step 5 after deploy if an old trace still has a bogus `core-offboard` wizard row from a dropped browser fetch.
-- `Could not reach the dashboard API` on offboard: step 5 now uses one long-lived `/api/mvd` call instead of many browser round-trips; confirm the dashboard pod/process stays up for up to ~2 minutes during offboard.
+- Core Demo offboard shows **Failed** / **error** but MVD steps (`terminateTransfer`, `verifyAccessRevoked` ≥403) look correct: refresh Execution History or Advanced Diagnostics — trace status is recomputed from MVD events and persisted on load. The wizard also polls the trace after a client error; re-run step 5 or hard-refresh if an old bundle still shows a bogus `core-offboard` WIZARD row (request body contains `"selection"` — that pattern is no longer written).
+- `Could not reach the dashboard API` on offboard: step 5 uses one long-lived `/api/mvd` call (up to ~2 minutes server-side). The dashboard may still have finished — wait a few seconds and open Advanced Diagnostics. If this repeats in Kubernetes, increase Traefik/proxy **read timeout** for the dashboard ingress (default limits are often 60s). Confirm the pod restarted after deploy (`maxDuration` on `/api/mvd` must be active).
 - Traces show `mock-transfer-1` or `0 ms` on every step: **mock mode is on** in Settings — set `MVD_MOCK_MODE=off` for real calls.
 - Missing offer, negotiation, agreement, or transfer IDs: inspect the latest trace in Advanced Diagnostics.
 - Hydration warnings after code changes: refresh the page so Turbopack serves the latest client bundle.

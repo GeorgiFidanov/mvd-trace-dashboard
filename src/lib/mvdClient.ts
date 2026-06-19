@@ -23,6 +23,7 @@ import { mockCatalog, mockDataflow, mockFinalData, mockIssuerCredentials, mockMe
 import { issuerAdminHeaders } from "./issuerAuth";
 import { redactHeaders, redactJson } from "./redaction";
 import { addTraceEvent, createTrace, getTrace, getTraceEvents, updateTrace } from "./storage";
+import { effectiveTraceStatus } from "./traceDiagnosis";
 import type { HealthCheckResult, MvdConfig, MvdStepResult, Trace, TraceEventStatus } from "./types";
 
 type StepCall = {
@@ -417,7 +418,9 @@ export async function runOffboardParticipant(
     // verifyAccessRevoked HTTP ≥400 in the trace is the intended pass signal.
   }
 
-  const trace = updateTrace(traceId, { status: "success" });
+  const trace = updateTrace(traceId, {
+    status: effectiveTraceStatus("success", getTraceEvents(traceId)),
+  });
 
   return {
     trace,

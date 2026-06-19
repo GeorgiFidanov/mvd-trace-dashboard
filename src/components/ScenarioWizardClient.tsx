@@ -45,6 +45,26 @@ const EDR_POLL_ATTEMPTS = 30;
 const EDR_POLL_DELAY_MS = 1000;
 const TRANSFER_POLL_ATTEMPTS = 20;
 const TRANSFER_POLL_DELAY_MS = 1000;
+const OFFBOARD_TRACE_POLL_MS = 500;
+const OFFBOARD_TRACE_POLL_ATTEMPTS = 12;
+
+function isOffboardStep(step: Pick<WizardStepDefinition, "id" | "action">) {
+  return step.id === "core-offboard" || step.action === "offboardParticipant";
+}
+
+function dashboardApiUnreachableMessage() {
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step.";
+  }
+  return "Could not reach the dashboard API. The offboard may still have finished on the server — wait a few seconds, open Advanced Diagnostics, or retry this step.";
+}
+
+function offboardFetchSignal() {
+  if (typeof AbortController === "undefined") return undefined;
+  const controller = new AbortController();
+  window.setTimeout(() => controller.abort(), 120_000);
+  return controller.signal;
+}
 
 export function ScenarioWizardClient({
   initialUseCase = "UC-CORE",
@@ -105,8 +125,8 @@ export function ScenarioWizardClient({
     let completed = true;
     for (const step of visibleSteps) {
       let nextSelection = await runStep(step, localSelection, false);
-      if (!nextSelection && step.action === "offboardParticipant" && localSelection.traceId) {
-        if (await offboardPassInTrace(localSelection.traceId)) {
+      if (!nextSelection && isOffboardStep(step) && localSelection.traceId) {
+        if (await offboardPassInTrace(localSelection.traceId, true)) {
           setStates((current) => ({ ...current, [step.id]: "success" }));
           nextSelection = localSelection;
         }
@@ -118,9 +138,9 @@ export function ScenarioWizardClient({
       localSelection = nextSelection;
     }
     if (localSelection.traceId) {
-      const passed = await offboardPassInTrace(localSelection.traceId);
+      const passed = await offboardPassInTrace(localSelection.traceId, true);
       if (passed) {
-        const offboardStep = visibleSteps.find((step) => step.action === "offboardParticipant");
+        const offboardStep = visibleSteps.find((step) => isOffboardStep(step));
         if (offboardStep) {
           setStates((current) => ({ ...current, [offboardStep.id]: "success" }));
         }
@@ -150,10 +170,10 @@ export function ScenarioWizardClient({
       setShowTechnicalLog(false);
       return execution.selection;
     } catch (error) {
-      if (step.action === "offboardParticipant") {
+      if (isOffboardStep(step)) {
         const nextSelection = await ensureTrace(currentSelection);
-        const traceId = nextSelection.traceId;
-        const passed = traceId ? await offboardPassInTrace(traceId) : false;
+        const traceId = nextSelection.traceId ?? currentSelection.traceId;
+        const passed = traceId ? await offboardPassInTrace(traceId, true) : false;
         if (traceId) {
           await finalizeTrace(traceId, passed ? "success" : "error");
         }
@@ -163,7 +183,7 @@ export function ScenarioWizardClient({
             step: step.title,
             traceId,
           });
-          setSelection(nextSelection);
+          setSelection({ ...nextSelection, traceId });
           setStates((current) => ({ ...current, [step.id]: "success" }));
           setMessage(
             "Offboard complete (100%). verifyAccessRevoked HTTP ≥400 in the trace is expected — it proves the data plane denied access.",
@@ -172,7 +192,7 @@ export function ScenarioWizardClient({
             assertionPassed: true,
             note: "MVD offboard evidence in trace counts as success.",
           });
-          return nextSelection;
+          return { ...nextSelection, traceId };
         }
         setSelection(nextSelection);
         setLastResult({
@@ -359,7 +379,7 @@ export function ScenarioWizardClient({
       };
     }
 
-    if (step.action === "offboardParticipant") {
+    if (isOffboardStep(step)) {
       if (!currentSelection.transferProcessId) {
         throw new Error("Complete step 4 — Access & Use Data — before offboarding so a transfer exists to terminate.");
       }
@@ -545,12 +565,21 @@ export function ScenarioWizardClient({
   }
 
   async function recordStepFailure(step: WizardStepDefinition, currentSelection: Selection, error: unknown) {
+    if (isOffboardStep(step)) {
+      const nextSelection = await ensureTrace(currentSelection);
+      const traceId = nextSelection.traceId ?? currentSelection.traceId;
+      if (traceId) {
+        const passed = await offboardPassInTrace(traceId, true);
+        await finalizeTrace(traceId, passed ? "success" : "error");
+      }
+      return nextSelection;
+    }
     const nextSelection = await ensureTrace(currentSelection);
     const traceId = nextSelection.traceId;
     if (traceId) {
       const offboardPassed = await offboardPassInTrace(traceId);
       const skipWizardError =
-        step.action === "offboardParticipant" ||
+        isOffboardStep(step) ||
         step.action === "health" ||
         (step.action !== undefined &&
           step.action !== "fetchData" &&
@@ -581,11 +610,17 @@ export function ScenarioWizardClient({
     return nextSelection;
   }
 
-  async function offboardPassInTrace(traceId: string) {
-    const response = await fetch(`/api/traces?id=${encodeURIComponent(traceId)}`, { cache: "no-store" });
-    if (!response.ok) return false;
-    const data = await response.json();
-    return traceHasOffboardPass(data.trace?.events ?? []);
+  async function offboardPassInTrace(traceId: string, poll = false) {
+    const attempts = poll ? OFFBOARD_TRACE_POLL_ATTEMPTS : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const response = await fetch(`/api/traces?id=${encodeURIComponent(traceId)}`, { cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        if (traceHasOffboardPass(data.trace?.events ?? [])) return true;
+      }
+      if (attempt < attempts - 1) await delay(OFFBOARD_TRACE_POLL_MS);
+    }
+    return false;
   }
 
   async function safeRecordWizardTraceEvent(
@@ -624,31 +659,39 @@ export function ScenarioWizardClient({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, ...payload }),
-          signal: action === "offboardParticipant" ? AbortSignal.timeout(120_000) : undefined,
+          signal: action === "offboardParticipant" ? offboardFetchSignal() : undefined,
         });
         break;
-      } catch (error) {
-        lastFetchError = error;
-        const detail = error instanceof Error ? error.message : String(error);
-        const retriable = detail === "fetch failed" || /failed to fetch|network|timeout/i.test(detail);
+      } catch (fetchError) {
+        lastFetchError = fetchError;
+        const detail = fetchError instanceof Error ? fetchError.message : String(fetchError);
+        const retriable = detail === "fetch failed" || /failed to fetch|network|abort/i.test(detail);
+        if (action === "offboardParticipant" && typeof payload.traceId === "string") {
+          const recovered = await offboardPassInTrace(payload.traceId, true);
+          if (recovered) {
+            const traceResponse = await fetch(`/api/traces?id=${encodeURIComponent(payload.traceId)}`, { cache: "no-store" });
+            if (traceResponse.ok) {
+              const traceData = await traceResponse.json();
+              return {
+                trace: traceData.trace,
+                accessRevoked: true,
+                credentialRevoked: true,
+                credentialResourceId: "",
+                recoveredFromTrace: true,
+              } as T;
+            }
+          }
+        }
         if (retriable && attempt < maxAttempts - 1) {
           await delay(600 * (attempt + 1));
           continue;
         }
-        throw new Error(
-          retriable
-            ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
-            : detail,
-        );
+        throw new Error(retriable ? dashboardApiUnreachableMessage() : detail);
       }
     }
     if (!response) {
       const detail = lastFetchError instanceof Error ? lastFetchError.message : String(lastFetchError);
-      throw new Error(
-        detail === "fetch failed"
-          ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
-          : detail,
-      );
+      throw new Error(/fetch failed|abort/i.test(detail) ? dashboardApiUnreachableMessage() : detail);
     }
     const data = await response.json();
     if (action === "verifyAccessRevoked" && isMvdStepResult(data)) {
@@ -666,11 +709,23 @@ export function ScenarioWizardClient({
     }
     if (!response.ok) {
       const detail = typeof data.error === "string" ? data.error : `Request failed: ${response.status}`;
-      throw new Error(
-        detail === "fetch failed"
-          ? "Could not reach the dashboard API. Confirm npm run dev is still running, then retry the step."
-          : detail,
-      );
+      if (action === "offboardParticipant" && typeof payload.traceId === "string") {
+        const recovered = await offboardPassInTrace(payload.traceId, true);
+        if (recovered) {
+          const traceResponse = await fetch(`/api/traces?id=${encodeURIComponent(payload.traceId)}`, { cache: "no-store" });
+          if (traceResponse.ok) {
+            const traceData = await traceResponse.json();
+            return {
+              trace: traceData.trace,
+              accessRevoked: true,
+              credentialRevoked: true,
+              credentialResourceId: "",
+              recoveredFromTrace: true,
+            } as T;
+          }
+        }
+      }
+      throw new Error(detail === "fetch failed" ? dashboardApiUnreachableMessage() : detail);
     }
     if (isMvdStepResult(data) && data.event.status === "error") {
       if (action === "verifyAccessRevoked" || action === "offboardParticipant") {

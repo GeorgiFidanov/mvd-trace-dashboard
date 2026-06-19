@@ -10,9 +10,9 @@ The target architecture has three layers:
   Diagnostics, and Settings.
 - Validation layer: scenario definitions, wizard state, use-case success criteria, history mapping, outcome
   summaries, and trace outcome interpretation (`traceDiagnosis.ts` — e.g. Core Demo offboard pass when MVD shows
-  termination and expected access denial).
-- EDC integration layer: Next.js dashboard API routes, MVD client helpers, trace recording, redaction, SQLite storage, health, and
-  readiness checks.
+  termination and expected access denial; wizard polls trace after client disconnect).
+- EDC integration layer: Next.js dashboard API routes, MVD client helpers (`runOffboardParticipant`), trace recording,
+  redaction, SQLite storage, health, readiness checks, and long-running route limits (`maxDuration` on `/api/mvd`).
 
 The existing MVD execution code remains the technical foundation. The redesign changes the vocabulary and routing around
 that foundation so users see "Identity verified", "Catalog discovered", and "Data received" before they see
